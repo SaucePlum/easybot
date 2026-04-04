@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easybot-qq"
+dynamic = ["version"]
+description = "轻量级 QQ 机器人 SDK，专注于简洁、容易上手且稳定"
+readme = "README.rst"
+license = {text = "MIT"}
+authors = [
+    {name = "小念同学", email = "2660422452@qq.com"}
+]
+maintainers = [
+    {name = "小念同学", email = "2660422452@qq.com"}
+]
+keywords = ["qq", "bot", "sdk", "qqbot", "robot", "chatbot", "botpy"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.9.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/SaucePlum/easybot"
+Documentation = "https://github.com/SaucePlum/easybot#readme"
+Repository = "https://github.com/SaucePlum/easybot.git"
+Issues = "https://github.com/SaucePlum/easybot/issues"
+
+[tool.setuptools]
+packages = ["easybot", "easybot._internal", "easybot.crypto"]
+
+[tool.setuptools.dynamic]
+version = {attr = "easybot.version.__version__"}
+
+[tool.setuptools.package-data]
+easybot = ["py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312", "py313"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+    | \.git
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
