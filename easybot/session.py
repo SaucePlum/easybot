@@ -9,8 +9,8 @@ import os
 import pickle
 from asyncio import AbstractEventLoop, sleep
 from collections import namedtuple
+from collections.abc import Sequence as ABCSequence
 from contextlib import contextmanager
-from copy import deepcopy
 from functools import wraps
 from time import time
 from typing import (
@@ -19,9 +19,9 @@ from typing import (
     Callable,
     Dict,
     Hashable,
-    Iterable,
     List,
     Optional,
+    Sequence,
     Union,
 )
 
@@ -332,14 +332,14 @@ class BoundSession:
         """
         return self._manager.remove(scope, identify, key)
 
-    def wait_for(
+    async def wait_for(
         self,
-        scopes: Union[str, Iterable[str]],
+        scopes: Union[str, Sequence[str]],
         command: Any = None,
         timeout: Optional[int] = None,
         predicate: Optional[Callable[[Any], bool]] = None,
         on_timeout: Optional[Callable[[], Any]] = None,
-    ) -> Model:
+    ) -> Model.MessageBase:
         """
         等待用户发送匹配的消息
 
@@ -358,7 +358,7 @@ class BoundSession:
             on_timeout: 超时时的回调函数
 
         Returns:
-            Model: 匹配的消息对象
+            Model.MessageBase: 匹配的消息对象
 
         Raises:
             WaitError: 等待任务被意外删除
@@ -371,7 +371,9 @@ class BoundSession:
             # 使用正则匹配数字
             reply = await session.wait_for(Scope.USER, re.compile(r'\\d+'), timeout=30)
         """
-        return self._manager.wait_for(scopes, command, timeout, predicate, on_timeout)
+        return await self._manager.wait_for(
+            scopes, command, timeout, predicate, on_timeout
+        )
 
 
 class SessionManager:
@@ -993,7 +995,7 @@ class SessionManager:
         )
 
     def register_wait_for(
-        self, obj: Any, scopes: Union[str, Iterable[str]], command: Any
+        self, obj: Any, scopes: Union[str, Sequence[str]], command: Any
     ) -> ScopeRegisterKey:
         """
         注册一个 wait_for 等待任务
@@ -1011,7 +1013,7 @@ class SessionManager:
             ScopeRegisterKey: 作用域键，用于后续检查和删除
         """
         _scope_value = {x: None for x in _AllScopeStr}
-        if isinstance(scopes, (list, tuple)):
+        if isinstance(scopes, ABCSequence) and not isinstance(scopes, str):
             for scope in scopes:
                 _scope_value[scope] = self.__check_identify(scope, obj)
         else:
@@ -1073,12 +1075,12 @@ class SessionManager:
 
     async def wait_for(
         self,
-        scopes: Union[str, Iterable[str]],
+        scopes: Union[str, Sequence[str]],
         command: Any = None,
         timeout: Optional[int] = None,
         predicate: Optional[Callable[[Any], bool]] = None,
         on_timeout: Optional[Callable[[], Any]] = None,
-    ) -> Model:
+    ) -> Model.MessageBase:
         """
         等待指定的命令被触发
 
@@ -1098,7 +1100,7 @@ class SessionManager:
             on_timeout: 超时回调函数，在抛出异常前调用
 
         Returns:
-            Model: 匹配的消息对象
+            Model.MessageBase: 匹配的消息对象
 
         Raises:
             ValueError: 未绑定消息对象
@@ -1331,8 +1333,9 @@ class SessionManager:
 
         这个方法由消息处理器调用，用于检测是否有等待中的 wait_for
         需要被触发。匹配逻辑是：
-        1. 消息的作用域标识符必须与注册时的 scope_key 匹配
+        1. 消息的作用域标识符必须与注册时的 scope_key 中任意一个匹配
         2. scope_key 中为 None 的作用域表示不限制
+        3. 多个 scope 是 OR 关系，只要匹配任意一个即可
 
         Args:
             obj: 收到的消息对象
@@ -1347,16 +1350,17 @@ class SessionManager:
         }
 
         for scope_key, command_callback in self.__wait_for_registers.items():
-            flag = True
+            has_any_scope = False
+            matched = False
             for scope in _AllScopeStr:
                 scope_key_value = getattr(scope_key, scope)
-                if (
-                    scope_key_value is not None
-                    and scope_key_value != _scope_value[scope]
-                ):
-                    flag = False
-                    break
-            if flag:
+                if scope_key_value is not None:
+                    has_any_scope = True
+                    if scope_key_value == _scope_value[scope]:
+                        matched = True
+                        break
+
+            if not has_any_scope or matched:
                 for command in command_callback:
                     predicate = getattr(command, "_predicate", None)
                     triggered_commands.append(

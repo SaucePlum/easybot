@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Optional, TypeVar, Union
 
 if TYPE_CHECKING:
     from ._internal.reply_strategy import ReplyStrategy
+    from .api import API
     from .builders import MessagesModel
 
 # 基础模型
@@ -173,7 +174,7 @@ class BaseModel:
         return result
 
     @property
-    def api(self):
+    def api(self) -> "API | None":
         """
         获取 API 实例
 
@@ -324,13 +325,15 @@ class Channel(BaseModel):
 
     TYPE_TEXT: ClassVar[int] = 0
     TYPE_VOICE: ClassVar[int] = 2
-    TYPE_LIVE: ClassVar[int] = 4
-    TYPE_CATEGORY: ClassVar[int] = 10005
-    TYPE_FORUM: ClassVar[int] = 10006
+    TYPE_CATEGORY: ClassVar[int] = 4
+    TYPE_LIVE: ClassVar[int] = 10005
+    TYPE_APP: ClassVar[int] = 10006
+    TYPE_FORUM: ClassVar[int] = 10007
 
     SUB_TYPE_TALK: ClassVar[int] = 0
-    SUB_TYPE_POST: ClassVar[int] = 1
-    SUB_TYPE_EMOJI: ClassVar[int] = 2
+    SUB_TYPE_ANNOUNCEMENT: ClassVar[int] = 1
+    SUB_TYPE_GUIDE: ClassVar[int] = 2
+    SUB_TYPE_TEAM: ClassVar[int] = 3
 
 
 @dataclass
@@ -2397,6 +2400,7 @@ class Model:
 
     # 基础模型
     BaseModel = BaseModel
+    MessageBase = MessageBase
 
     # 用户相关模型
     Author = Author

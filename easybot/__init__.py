@@ -24,7 +24,14 @@ from .models import Model
 from .plugins import BotAdminManager, BotCommandObject, CommandValidScenes, Plugins
 from .protocol import Proto
 from .sandbox import SandBox
-from .session import Scope, SessionManager, WaitError, WaitTimeoutError, with_session
+from .session import (
+    BoundSession,
+    Scope,
+    SessionManager,
+    WaitError,
+    WaitTimeoutError,
+    with_session,
+)
 from .version import __version__
 
 __all__ = [
@@ -49,6 +56,7 @@ __all__ = [
     "CommandValidScenes",
     "BotAdminManager",
     "BotCommandObject",
+    "BoundSession",
     "Plugins",
     "SessionManager",
     "Scope",

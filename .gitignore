@@ -142,7 +142,6 @@ logs/
 
 
 plugins/
-.trae/
 test/config/config.py
 local.py
 sdk_data/

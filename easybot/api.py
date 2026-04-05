@@ -22,8 +22,7 @@ from typing import TYPE_CHECKING, Any, Union
 import aiohttp
 
 from ._internal import HTTPClient
-from .builders import Builders, MessagesModel
-
+from .builders import MessagesModel
 from .models import Model
 
 if TYPE_CHECKING:

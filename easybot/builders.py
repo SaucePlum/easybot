@@ -469,7 +469,9 @@ class MessagesModel:
             data: dict[str, Any] = {}
 
             if self._content:
+                # markdown.content: Markdown 对象的内容，用于渲染 Markdown 消息
                 data["markdown"] = {"content": self._content}
+                # 顶级 content: 消息文本内容，群聊场景必填，用于消息列表预览、通知显示等
                 data["content"] = self._content
             elif self._template_id:
                 if not self._key_values:
