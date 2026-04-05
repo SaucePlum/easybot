@@ -35,7 +35,7 @@ export default defineUserConfig({
   }),
 
   theme: recoTheme({
-    logo: '/easybot/logo.svg',
+    logo: '/logo.svg',
     repo: 'https://github.com/SaucePlum/easybot',
     docsDir: 'docs',
     docsBranch: 'main',

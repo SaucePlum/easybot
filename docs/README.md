@@ -9,8 +9,8 @@ bannerBrand:
   title: EasyBot SDK
   description: QQ 官方机器人平台轻量级 Python SDK
   tagline: 简洁 · 易上手 · 稳定
-  heroImage: /easybot/logo.svg
-  bgImage: /easybot/bg.svg
+  heroImage: /logo.svg
+  bgImage: /bg.svg
   buttons:
     - text: 快速开始
       link: /02_快速入门
