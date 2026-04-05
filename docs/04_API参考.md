@@ -1231,8 +1231,8 @@ async def create_thread(
     self,
     channel_id: str,
     title: str,
-    content: str,
-    format: int = 3,
+    content: str | Model.ThreadContent,
+    format: int | None = None,
 ) -> Model.CreateThreadResponse
 ```
 
@@ -1242,10 +1242,28 @@ async def create_thread(
 |------|------|------|
 | `channel_id` | `str` | 子频道 ID（须为论坛子频道 type=10007） |
 | `title` | `str` | 帖子标题 |
-| `content` | `str` | 帖子内容 |
-| `format` | `int` | 帖子格式（1=纯文本, 2=HTML, 3=Markdown, 4=JSON），默认 3 |
+| `content` | `str \| Model.ThreadContent` | 帖子内容，支持字符串或 ThreadContent 对象 |
+| `format` | `int \| None` | 帖子格式（1=纯文本, 2=HTML, 3=Markdown, 4=JSON）。content 为字符串时默认 3，为 ThreadContent 时自动设为 4 |
 
 **返回**: `Model.CreateThreadResponse`
+
+**使用示例**:
+
+```python
+# Markdown 格式发帖
+await bot.api.create_thread(channel_id="xxx", title="标题", content="正文内容")
+
+# JSON 格式发帖（使用构建器）
+from easybot import Builders
+
+content = (Builders.ThreadContentBuilder()
+    .add_text_paragraph("第一段文字")
+    .add_image_paragraph("https://example.com/image.png")
+    .add_text_paragraph("第二段文字", bold=True)
+    .build())
+
+await bot.api.create_thread(channel_id="xxx", title="标题", content=content)
+```
 
 ---
 

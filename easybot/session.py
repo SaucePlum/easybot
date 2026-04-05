@@ -25,7 +25,7 @@ from typing import (
     Union,
 )
 
-from .messages_model import MessagesModel
+from .builders import MessagesModel
 from .models import Model
 from .plugins import BotCommandObject, CommandValidScenes
 

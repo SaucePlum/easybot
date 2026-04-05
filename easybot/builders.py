@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-EasyBot SDK 消息构建模块
+EasyBot SDK 构建器模块
 
-提供所有消息类型的构建类，用于构建发送消息所需的参数。
+提供所有消息和内容的构建类，用于构建发送消息所需的参数。
 
 使用示例：
     # 普通消息
@@ -16,12 +16,21 @@ EasyBot SDK 消息构建模块
 
     # Markdown 消息
     md = MessagesModel.MessageMarkdown(template_id="xxx", key_values={"key": "value"})
+
+    # 帖子内容（JSON 格式发帖）
+    content = (Builders.ThreadContentBuilder()
+        .add_text_paragraph("第一段文字")
+        .add_image_paragraph("https://example.com/image.png")
+        .build())
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
+
+if TYPE_CHECKING:
+    from .models import ThreadContent, ThreadContentParagraph
 
 
 class MessagesModel:
@@ -461,6 +470,7 @@ class MessagesModel:
 
             if self._content:
                 data["markdown"] = {"content": self._content}
+                data["content"] = self._content
             elif self._template_id:
                 if not self._key_values:
                     raise ValueError("使用模板时必须提供 key_values")
@@ -470,6 +480,10 @@ class MessagesModel:
                     "custom_template_id": self._template_id,
                     "params": params,
                 }
+                text_values = []
+                for p in params:
+                    text_values.extend(p.get("values", []))
+                data["content"] = " ".join(text_values)
             else:
                 raise ValueError("必须提供 content 或 template_id")
 
@@ -492,3 +506,262 @@ class MessagesModel:
                 else:
                     params.append({"key": k, "values": [str(v)]})
             return params
+
+
+class ParagraphBuilder:
+    """
+    段落构建器
+
+    用于构建 ThreadContentParagraph 对象，提供流畅的 API。
+
+    使用示例:
+        paragraph = (ParagraphBuilder()
+            .add_text("Hello World", bold=True)
+            .add_image("https://example.com/image.png")
+            .set_alignment(Alignment.ALIGNMENT_CENTER)
+            .build())
+    """
+
+    def __init__(self):
+        self._elems: list = []
+        self._alignment: int = 0
+
+    def add_text(
+        self,
+        text: str,
+        bold: bool = False,
+        italic: bool = False,
+        underline: bool = False,
+    ) -> "ParagraphBuilder":
+        """
+        添加文本元素
+
+        Args:
+            text: 文本内容
+            bold: 是否加粗
+            italic: 是否斜体
+            underline: 是否下划线
+
+        Returns:
+            ParagraphBuilder: 构建器实例
+        """
+        from .models import TextProps, ThreadContentElem, ThreadContentText
+
+        text_props = TextProps(font_bold=bold, italic=italic, underline=underline)
+        text_elem = ThreadContentText(text=text, props=text_props)
+        elem = ThreadContentElem(type=ThreadContentElem.TYPE_TEXT, text=text_elem)
+        self._elems.append(elem)
+        return self
+
+    def add_image(
+        self,
+        third_url: str,
+        width_percent: float = 1.0,
+    ) -> "ParagraphBuilder":
+        """
+        添加图片元素
+
+        Args:
+            third_url: 第三方图片链接
+            width_percent: 宽度比例
+
+        Returns:
+            ParagraphBuilder: 构建器实例
+        """
+        from .models import ThreadContentElem, ThreadContentImage
+
+        image_elem = ThreadContentImage(
+            third_url=third_url, width_percent=width_percent
+        )
+        elem = ThreadContentElem(type=ThreadContentElem.TYPE_IMAGE, image=image_elem)
+        self._elems.append(elem)
+        return self
+
+    def add_video(
+        self,
+        third_url: str,
+    ) -> "ParagraphBuilder":
+        """
+        添加视频元素
+
+        Args:
+            third_url: 第三方视频链接
+
+        Returns:
+            ParagraphBuilder: 构建器实例
+        """
+        from .models import ThreadContentElem, ThreadContentVideo
+
+        video_elem = ThreadContentVideo(third_url=third_url)
+        elem = ThreadContentElem(type=ThreadContentElem.TYPE_VIDEO, video=video_elem)
+        self._elems.append(elem)
+        return self
+
+    def add_url(
+        self,
+        url: str,
+        desc: str = "",
+    ) -> "ParagraphBuilder":
+        """
+        添加链接元素
+
+        Args:
+            url: 链接地址
+            desc: 链接描述
+
+        Returns:
+            ParagraphBuilder: 构建器实例
+        """
+        from .models import ThreadContentElem, ThreadContentUrl
+
+        url_elem = ThreadContentUrl(url=url, desc=desc)
+        elem = ThreadContentElem(type=ThreadContentElem.TYPE_URL, url=url_elem)
+        self._elems.append(elem)
+        return self
+
+    def set_alignment(self, alignment: int) -> "ParagraphBuilder":
+        """
+        设置段落对齐方式
+
+        Args:
+            alignment: 对齐方式，使用 Alignment 枚举值
+
+        Returns:
+            ParagraphBuilder: 构建器实例
+        """
+        self._alignment = alignment
+        return self
+
+    def build(self) -> "ThreadContentParagraph":
+        """
+        构建段落对象
+
+        Returns:
+            ThreadContentParagraph: 段落对象
+        """
+        from .models import ParagraphProps, ThreadContentParagraph
+
+        props = ParagraphProps(alignment=self._alignment)
+        return ThreadContentParagraph(elems=self._elems, props=props)
+
+
+class ThreadContentBuilder:
+    """
+    帖子内容构建器
+
+    用于构建 ThreadContent 对象，简化 JSON 格式发帖。
+
+    使用示例:
+        content = (ThreadContentBuilder()
+            .add_text_paragraph("这是标题")
+            .add_paragraph(
+                ParagraphBuilder()
+                .add_text("正文内容", bold=True)
+                .add_image("https://example.com/image.png")
+            )
+            .build())
+
+        await api.create_thread(channel_id, "帖子标题", content)
+    """
+
+    def __init__(self):
+        self._paragraphs: list = []
+
+    def add_paragraph(
+        self,
+        paragraph: "ThreadContentParagraph | ParagraphBuilder",
+    ) -> "ThreadContentBuilder":
+        """
+        添加段落
+
+        Args:
+            paragraph: 段落对象或段落构建器
+
+        Returns:
+            ThreadContentBuilder: 构建器实例
+        """
+        if isinstance(paragraph, ParagraphBuilder):
+            paragraph = paragraph.build()
+        self._paragraphs.append(paragraph)
+        return self
+
+    def add_text_paragraph(
+        self,
+        text: str,
+        bold: bool = False,
+        italic: bool = False,
+        underline: bool = False,
+        alignment: int = 0,
+    ) -> "ThreadContentBuilder":
+        """
+        添加纯文本段落（快捷方法）
+
+        Args:
+            text: 文本内容
+            bold: 是否加粗
+            italic: 是否斜体
+            underline: 是否下划线
+            alignment: 对齐方式
+
+        Returns:
+            ThreadContentBuilder: 构建器实例
+        """
+        paragraph = (
+            ParagraphBuilder()
+            .add_text(text, bold=bold, italic=italic, underline=underline)
+            .set_alignment(alignment)
+            .build()
+        )
+        self._paragraphs.append(paragraph)
+        return self
+
+    def add_image_paragraph(
+        self,
+        third_url: str,
+        width_percent: float = 1.0,
+        alignment: int = 0,
+    ) -> "ThreadContentBuilder":
+        """
+        添加图片段落（快捷方法）
+
+        Args:
+            third_url: 第三方图片链接
+            width_percent: 宽度比例
+            alignment: 对齐方式
+
+        Returns:
+            ThreadContentBuilder: 构建器实例
+        """
+        paragraph = (
+            ParagraphBuilder()
+            .add_image(third_url, width_percent)
+            .set_alignment(alignment)
+            .build()
+        )
+        self._paragraphs.append(paragraph)
+        return self
+
+    def build(self) -> "ThreadContent":
+        """
+        构建帖子内容对象
+
+        Returns:
+            ThreadContent: 帖子内容对象
+        """
+        from .models import ThreadContent
+
+        return ThreadContent(paragraphs=self._paragraphs)
+
+
+class Builders:
+    """
+    论坛内容构建器入口类
+
+    论坛内容构建类通过 Builders.xxx 访问。
+
+    使用示例：
+        content = Builders.ThreadContentBuilder().add_text_paragraph("文本").build()
+    """
+
+    ParagraphBuilder = ParagraphBuilder
+    ThreadContentBuilder = ThreadContentBuilder

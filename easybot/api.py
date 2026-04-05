@@ -22,7 +22,8 @@ from typing import TYPE_CHECKING, Any, Union
 import aiohttp
 
 from ._internal import HTTPClient
-from .messages_model import MessagesModel
+from .builders import Builders, MessagesModel
+
 from .models import Model
 
 if TYPE_CHECKING:
@@ -1680,8 +1681,8 @@ class API:
         self,
         channel_id: str,
         title: str,
-        content: str,
-        format: int = 3,
+        content: str | Model.ThreadContent,
+        format: int | None = None,
     ) -> Model.CreateThreadResponse:
         """
         发表帖子
@@ -1689,14 +1690,37 @@ class API:
         Args:
             channel_id: 子频道 ID（须为论坛子频道 type=10007）
             title: 帖子标题
-            content: 帖子内容
-            format: 帖子格式（1=纯文本, 2=HTML, 3=Markdown, 4=JSON），默认 3
+            content: 帖子内容，支持字符串或 ThreadContent 对象
+                     - 字符串: 需配合 format 参数指定格式
+                     - ThreadContent: 自动使用 JSON 格式(format=4)
+            format: 帖子格式（1=纯文本, 2=HTML, 3=Markdown, 4=JSON）
+                    当 content 为字符串时默认为 3，为 ThreadContent 时自动设为 4
 
         Returns:
             Model.CreateThreadResponse: 创建帖子响应，包含 task_id 和 create_time
+
+        使用示例:
+            # Markdown 格式发帖
+            await api.create_thread(channel_id, "标题", "正文内容")
+
+            # JSON 格式发帖（使用构建器）
+            content = (Builders.ThreadContentBuilder()
+                .add_text_paragraph("第一段文字")
+                .add_image_paragraph("https://example.com/image.png")
+                .add_text_paragraph("第二段文字", bold=True)
+                .build())
+            await api.create_thread(channel_id, "标题", content)
         """
         http = await self._get_http()
-        payload = {"title": title, "content": content, "format": format}
+
+        if isinstance(content, Model.ThreadContent):
+            content_str = json.dumps(content.to_dict(), ensure_ascii=False)
+            format_value = 4
+        else:
+            content_str = content
+            format_value = format if format is not None else 3
+
+        payload = {"title": title, "content": content_str, "format": format_value}
         data = await http.put(f"/channels/{channel_id}/threads", json=payload)
         return Model.CreateThreadResponse.from_dict(data)
 

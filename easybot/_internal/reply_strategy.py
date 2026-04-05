@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from ..api import API
-    from ..messages_model import MessagesModel
+    from ..builders import MessagesModel
 
 
 class ReplyStrategy(ABC):

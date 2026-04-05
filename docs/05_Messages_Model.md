@@ -1,21 +1,23 @@
-# Messages Model — 消息构建器
+# 构建器 — 消息与内容构建
 
-MessagesModel 是 EasyBot SDK 中用于**构建发送消息**的工具集。每种消息类型对应一个构建器类，通过统一的 `.build()` 方法生成 API 所需的字典数据。
+EasyBot SDK 提供两类构建器：
+- **MessagesModel** — 消息构建器，用于构建发送消息的内容
+- **Builders** — 论坛内容构建器，用于构建 JSON 格式发帖内容
 
-> **导入**: `from easybot import MessagesModel` 或 `from easybot import Message, MessageEmbed, ...`
+> **导入**: `from easybot import MessagesModel, Builders`
 
 ---
 
-## 概览
+## 消息构建器概览
 
 | 构建器 | 类名 | msg_type | 适用场景 |
 |--------|------|----------|---------|
-| 文本消息 | `Message` | 0 / 7 | 基础文本、图片、引用回复 |
-| Embed 卡片 | `MessageEmbed` | 4 | 结构化信息展示 |
-| Ark 23 链接列表 | `MessageArk23` | 3 | 多行链接列表 |
-| Ark 24 图文卡片 | `MessageArk24` | 3 | 标题+描述+缩略图 |
-| Ark 37 大图卡片 | `MessageArk37` | 3 | 大图展示模板 |
-| Markdown | `MessageMarkdown` | 2 | 富文本格式消息 |
+| 文本消息 | `MessagesModel.Message` | 0 / 7 | 基础文本、图片、引用回复 |
+| Embed 卡片 | `MessagesModel.MessageEmbed` | 4 | 结构化信息展示 |
+| Ark 23 链接列表 | `MessagesModel.MessageArk23` | 3 | 多行链接列表 |
+| Ark 24 图文卡片 | `MessagesModel.MessageArk24` | 3 | 标题+描述+缩略图 |
+| Ark 37 大图卡片 | `MessagesModel.MessageArk37` | 3 | 大图展示模板 |
+| Markdown | `MessagesModel.MessageMarkdown` | 2 | 富文本格式消息 |
 
 ---
 
@@ -204,25 +206,6 @@ ark = MessagesModel.MessageArk23(
 await bot.api.send_guild_message(channel_id="xxx", content=ark)
 ```
 
-### build() 输出结构
-
-```json
-{
-    "ark": {
-        "template_id": 23,
-        "kv": [
-            {"key": "#DESC#", "value": "快速链接"},
-            {"key": "#PROMPT#", "value": "查看文档"},
-            {"key": "#LIST#", "obj": [
-                {"obj_kv": [{"key": "desc", "value": "GitHub 主页"}, {"key": "link", "value": "https://..."}]},
-                {"obj_kv": [{"key": "desc", "value": "API 文档"}, {"key": "link", "value": "https://..."}]},
-                {"obj_kv": [{"key": "desc", "value": "Issue 跟踪"}, {"key": "link", "value": "https://..."}]}
-            ]}
-        ]
-    }
-}
-```
-
 ---
 
 ## MessageArk24 — 图文卡片模板 (Ark 24)
@@ -372,23 +355,6 @@ md = MessagesModel.MessageMarkdown(
 )
 ```
 
-### 支持的 Markdown 语法
-
-QQ 开放平台的 Markdown 渲染引擎支持以下语法：
-
-| 语法 | 示例 | 效果 |
-|------|------|------|
-| 标题 | `# H1` / `## H2` / `### H3` | 不同大小的标题 |
-| 加粗 | `**粗体**` | **粗体** |
-| 斜体 | `*斜体*` | *斜体* |
-| 删除线 | `~~删除~~` | ~~删除~~ |
-| 行内代码 | `` `code` `` | `code` |
-| 引用 | `> 引用` | 引用块 |
-| 无序列表 | `- 项目` | • 项目 |
-| 有序列表 | `1. 项目` | 1. 项目 |
-| 链接 | `[文字](url)` | 可点击链接 |
-| 图片 | `![alt](url)` | 内嵌图片 |
-
 ---
 
 ## 消息类型选择指南
@@ -397,12 +363,70 @@ QQ 开放平台的 Markdown 渲染引擎支持以下语法：
 
 | 需求 | 推荐类型 | 说明 |
 |------|---------|------|
-| 简单文本回复 | `Message` | 最简单直接 |
-| 文本 + 图片 | `Message(image=...)` | 一行代码搞定 |
-| 结构化信息展示 | `MessageEmbed` | 清晰的字段布局 |
-| 导航/链接列表 | `MessageArk23` | 多行可点击链接 |
-| 推广/资讯卡片 | `MessageArk24` / `MessageArk37` | 视觉吸引力强 |
-| 富文本格式化 | `MessageMarkdown` | 支持标题/列表/加粗等 |
+| 简单文本回复 | `MessagesModel.Message` | 最简单直接 |
+| 文本 + 图片 | `MessagesModel.Message(image=...)` | 一行代码搞定 |
+| 结构化信息展示 | `MessagesModel.MessageEmbed` | 清晰的字段布局 |
+| 导航/链接列表 | `MessagesModel.MessageArk23` | 多行可点击链接 |
+| 推广/资讯卡片 | `MessagesModel.MessageArk24` / `MessageArk37` | 视觉吸引力强 |
+| 富文本格式化 | `MessagesModel.MessageMarkdown` | 支持标题/列表/加粗等 |
+
+---
+
+## 论坛内容构建器
+
+用于构建 JSON 格式发帖内容（`format=4`）。
+
+### ThreadContentBuilder — 帖子内容构建器
+
+```python
+from easybot import Builders
+
+# 构建帖子内容
+content = (Builders.ThreadContentBuilder()
+    .add_text_paragraph("第一段文字")
+    .add_image_paragraph("https://example.com/image.png")
+    .add_text_paragraph("第二段文字", bold=True)
+    .build())
+
+# 发帖
+await bot.api.create_thread(channel_id="xxx", title="帖子标题", content=content)
+```
+
+### ParagraphBuilder — 段落构建器
+
+用于构建更复杂的段落内容：
+
+```python
+# 复杂段落（混合内容）
+paragraph = (Builders.ParagraphBuilder()
+    .add_text("文字", bold=True)
+    .add_url("https://example.com", "链接描述")
+    .add_image("https://example.com/image.png")
+    .set_alignment(Model.Alignment.ALIGNMENT_CENTER)
+    .build())
+
+content = (Builders.ThreadContentBuilder()
+    .add_paragraph(paragraph)
+    .build())
+```
+
+### 段落元素方法
+
+| 方法 | 说明 |
+|------|------|
+| `add_text(text, bold, italic, underline)` | 添加文本 |
+| `add_image(third_url, width_percent)` | 添加图片 |
+| `add_video(third_url)` | 添加视频 |
+| `add_url(url, desc)` | 添加链接 |
+| `set_alignment(alignment)` | 设置对齐方式 |
+
+### 帖子内容构建方法
+
+| 方法 | 说明 |
+|------|------|
+| `add_paragraph(paragraph)` | 添加段落对象 |
+| `add_text_paragraph(text, ...)` | 快捷添加文本段落 |
+| `add_image_paragraph(third_url, ...)` | 快捷添加图片段落 |
 
 ---
 

@@ -16,6 +16,7 @@ Model 库定义 EasyBot SDK 中所有数据对象的类型结构，基于 Python
 | 方法 | 说明 |
 |------|------|
 | `from_dict(data: dict)` | 类方法，从字典创建模型实例 |
+| `to_dict()` | 将模型实例转换为字典（用于序列化） |
 | `reply(content, reference=False)` | 快速回复消息（仅消息事件模型） |
 
 ### 通用属性
@@ -428,9 +429,228 @@ class AuditResult(BaseModel):
     guild_id: str = ""
     channel_id: str = ""
     author_id: str = ""
-    type: int = 0
+    thread_id: str = ""
+    post_id: str = ""
+    reply_id: str = ""
+    type: int = 0                          # AuditType 审核类型
     result: int = 0                        # 0=通过 1=拒绝
     err_msg: str = ""                      # 错误信息
+```
+
+#### AuditType 审核类型枚举
+
+```python
+class AuditType(IntEnum):
+    PUBLISH_THREAD = 1                     # 帖子
+    PUBLISH_POST = 2                       # 评论
+    PUBLISH_REPLY = 3                      # 回复
+```
+
+#### ThreadContent 帖子内容
+
+```python
+@dataclass
+class ThreadContent(BaseModel):
+    paragraphs: list[ThreadContentParagraph] = []  # 段落列表
+```
+
+**解析帖子内容示例**:
+
+```python
+import json
+from easybot import Model
+
+content_dict = json.loads(thread.thread_info.content)
+content = Model.ThreadContent.from_dict(content_dict)
+```
+
+**构建帖子内容示例**（用于发帖）:
+
+```python
+from easybot import Builders
+
+content = (Builders.ThreadContentBuilder()
+    .add_text_paragraph("第一段文字")
+    .add_image_paragraph("https://example.com/image.png")
+    .build())
+
+await bot.api.create_thread(channel_id="xxx", title="标题", content=content)
+```
+
+#### ThreadContentParagraph 段落
+
+```python
+@dataclass
+class ThreadContentParagraph(BaseModel):
+    elems: list[ThreadContentElem] = []    # 元素列表
+    props: Optional[ParagraphProps] = None  # 段落属性
+```
+
+#### ThreadContentElem 元素
+
+```python
+@dataclass
+class ThreadContentElem(BaseModel):
+    type: int = 1                          # 元素类型
+    text: Optional[ThreadContentText] = None
+    image: Optional[ThreadContentImage] = None
+    video: Optional[ThreadContentVideo] = None
+    url: Optional[ThreadContentUrl] = None
+
+    TYPE_TEXT: ClassVar[int] = 1           # 文本
+    TYPE_IMAGE: ClassVar[int] = 2          # 图片
+    TYPE_VIDEO: ClassVar[int] = 3          # 视频
+    TYPE_URL: ClassVar[int] = 4            # 链接
+```
+
+#### ThreadContentText 文本元素
+
+```python
+@dataclass
+class ThreadContentText(BaseModel):
+    text: str = ""
+    props: Optional[TextProps] = None      # 文本属性
+```
+
+#### ThreadContentImage 图片元素
+
+```python
+@dataclass
+class ThreadContentImage(BaseModel):
+    third_url: str = ""                    # 第三方图片链接
+    width_percent: float = 0.0             # 宽度比例
+```
+
+#### ThreadContentVideo 视频元素
+
+```python
+@dataclass
+class ThreadContentVideo(BaseModel):
+    third_url: str = ""                    # 第三方视频链接
+    plat_video: Optional[ThreadContentPlatVideo] = None
+```
+
+#### TextProps 文本属性
+
+```python
+@dataclass
+class TextProps(BaseModel):
+    font_bold: bool = False                # 加粗
+    italic: bool = False                   # 斜体
+    underline: bool = False                # 下划线
+```
+
+#### ParagraphProps 段落属性
+
+```python
+@dataclass
+class ParagraphProps(BaseModel):
+    alignment: int = 0                     # 对齐方式（Alignment 枚举）
+```
+
+#### Alignment 对齐方式枚举
+
+```python
+class Alignment(IntEnum):
+    ALIGNMENT_LEFT = 0                     # 左对齐
+    ALIGNMENT_MIDDLE = 1                   # 居中
+    ALIGNMENT_RIGHT = 2                    # 右对齐
+```
+
+#### RichText 富文本对象
+
+用于论坛帖子内容中的富文本元素。
+
+```python
+@dataclass
+class RichText(BaseModel):
+    type: int = 0                          # RichType 富文本类型
+    text_info: Optional[TextInfo] = None
+    at_info: Optional[AtInfo] = None
+    url_info: Optional[URLInfo] = None
+    emoji_info: Optional[EmojiInfo] = None
+    channel_info: Optional[ChannelInfo] = None
+
+    TYPE_TEXT: ClassVar[int] = 1
+    TYPE_AT: ClassVar[int] = 2
+    TYPE_URL: ClassVar[int] = 3
+    TYPE_EMOJI: ClassVar[int] = 4
+    TYPE_CHANNEL: ClassVar[int] = 5
+    TYPE_VIDEO: ClassVar[int] = 10
+    TYPE_IMAGE: ClassVar[int] = 11
+```
+
+#### AtInfo @内容信息
+
+```python
+@dataclass
+class AtInfo(BaseModel):
+    type: int = 0                          # AtType @类型
+    user_info: Optional[AtUserInfo] = None
+    role_info: Optional[AtRoleInfo] = None
+    guild_info: Optional[AtGuildInfo] = None
+```
+
+#### AtType @类型枚举
+
+```python
+class AtType(IntEnum):
+    AT_EXPLICIT_USER = 1                   # @特定人
+    AT_ROLE_GROUP = 2                      # @角色组所有人
+    AT_GUILD = 3                           # @频道所有人
+```
+
+#### AtUserInfo @用户信息
+
+```python
+@dataclass
+class AtUserInfo(BaseModel):
+    id: str = ""
+    nick: str = ""
+```
+
+#### AtRoleInfo @身份组信息
+
+```python
+@dataclass
+class AtRoleInfo(BaseModel):
+    role_id: int = 0
+    name: str = ""
+    color: int = 0
+```
+
+#### AtGuildInfo @频道信息
+
+```python
+@dataclass
+class AtGuildInfo(BaseModel):
+    guild_id: str = ""
+    guild_name: str = ""
+```
+
+#### TextInfo / URLInfo / EmojiInfo / ChannelInfo
+
+```python
+@dataclass
+class TextInfo(BaseModel):
+    text: str = ""
+
+@dataclass
+class URLInfo(BaseModel):
+    url: str = ""
+    display_text: str = ""
+
+@dataclass
+class EmojiInfo(BaseModel):
+    id: str = ""
+    type: str = ""
+    name: str = ""
+    url: str = ""
+
+@dataclass
+class ChannelInfo(BaseModel):
+    channel_id: int = 0
+    channel_name: str = ""
 ```
 
 ### GroupEvent / FriendEvent 群聊/好友事件

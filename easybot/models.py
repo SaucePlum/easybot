@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Optional, TypeVar, Union
 
 if TYPE_CHECKING:
     from ._internal.reply_strategy import ReplyStrategy
-    from .messages_model import MessagesModel
+    from .builders import MessagesModel
 
 # 基础模型
 T = TypeVar("T", bound="BaseModel")
@@ -96,6 +96,43 @@ class BaseModel:
 
         return cls(**kwargs)
 
+    _TO_DICT_EXCLUDE_FIELDS = {
+        "event_id",
+        "seq",
+        "opcode",
+        "event_type",
+        "_msg_seq",
+    }
+
+    def to_dict(self) -> dict:
+        """
+        将模型实例转换为字典
+
+        Returns:
+            dict: 模型数据的字典表示
+        """
+        result = {}
+        for f in self.__dataclass_fields__.values():
+            if f.name.startswith("_"):
+                continue
+            if f.name in self._TO_DICT_EXCLUDE_FIELDS:
+                continue
+            if f.name.isupper():
+                continue
+            value = getattr(self, f.name)
+            if value is None:
+                continue
+            if isinstance(value, BaseModel):
+                result[f.name] = value.to_dict()
+            elif isinstance(value, list):
+                result[f.name] = [
+                    item.to_dict() if isinstance(item, BaseModel) else item
+                    for item in value
+                ]
+            else:
+                result[f.name] = value
+        return result
+
     async def reply(
         self,
         content: "Union[str, MessagesModel.Message, MessagesModel.MessageEmbed, MessagesModel.MessageArk23, MessagesModel.MessageArk24, MessagesModel.MessageArk37, MessagesModel.MessageMarkdown]",
@@ -134,6 +171,34 @@ class BaseModel:
         )
         self._msg_seq += 1
         return result
+
+    @property
+    def api(self):
+        """
+        获取 API 实例
+
+        通过此属性可以访问所有 API 方法，用于主动调用接口。
+
+        Returns:
+            API 实例，如果模型不支持则返回 None
+
+        使用示例:
+            # 发送消息到其他子频道
+            await msg.api.send_guild_message(
+                channel_id="其他子频道ID",
+                content="主动消息"
+            )
+
+            # 创建论坛帖子
+            await msg.api.create_thread(
+                channel_id="论坛子频道ID",
+                title="帖子标题",
+                content="帖子内容"
+            )
+        """
+        if self._reply_strategy is None:
+            return None
+        return self._reply_strategy._api
 
 
 # 用户相关模型
@@ -362,41 +427,270 @@ class ThreadInfo(BaseModel):
     title: str = ""
     content: str = ""
     date_time: str = ""
-    mentions: list = field(default_factory=list)
-    mention_channels: list = field(default_factory=list)
+
+
+class AuditType(IntEnum):
+    """
+    审核类型枚举
+
+    用于论坛审核事件。
+    """
+
+    PUBLISH_THREAD = 1
+    PUBLISH_POST = 2
+    PUBLISH_REPLY = 3
+
+
+class AtType(IntEnum):
+    """
+    @类型枚举
+
+    用于富文本 @ 内容。
+    """
+
+    AT_EXPLICIT_USER = 1
+    AT_ROLE_GROUP = 2
+    AT_GUILD = 3
+
+
+class Alignment(IntEnum):
+    """
+    段落对齐方向枚举
+
+    用于富文本段落属性。
+    """
+
+    ALIGNMENT_LEFT = 0
+    ALIGNMENT_MIDDLE = 1
+    ALIGNMENT_RIGHT = 2
+
+
+@dataclass
+class TextInfo(BaseModel):
+    """
+    富文本 - 普通文本信息
+
+    用于 RichObject 中的 text_info 字段。
+    """
+
+    text: str = ""
+
+
+@dataclass
+class AtUserInfo(BaseModel):
+    """
+    富文本 - @用户信息
+
+    用于 AtInfo 中的 user_info 字段。
+    """
+
+    id: str = ""
+    nick: str = ""
+
+
+@dataclass
+class AtRoleInfo(BaseModel):
+    """
+    富文本 - @身份组信息
+
+    用于 AtInfo 中的 role_info 字段。
+    """
+
+    role_id: int = 0
+    name: str = ""
+    color: int = 0
+
+
+@dataclass
+class AtGuildInfo(BaseModel):
+    """
+    富文本 - @频道信息
+
+    用于 AtInfo 中的 guild_info 字段。
+    """
+
+    guild_id: str = ""
+    guild_name: str = ""
+
+
+@dataclass
+class AtInfo(BaseModel):
+    """
+    富文本 - @内容信息
+
+    用于 RichObject 中的 at_info 字段。
+    """
+
+    type: int = 0
+    user_info: Optional[AtUserInfo] = None
+    role_info: Optional[AtRoleInfo] = None
+    guild_info: Optional[AtGuildInfo] = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AtInfo":
+        if data is None:
+            return None
+
+        user_info_data = data.get("user_info")
+        user_info = AtUserInfo.from_dict(user_info_data) if user_info_data else None
+
+        role_info_data = data.get("role_info")
+        role_info = AtRoleInfo.from_dict(role_info_data) if role_info_data else None
+
+        guild_info_data = data.get("guild_info")
+        guild_info = AtGuildInfo.from_dict(guild_info_data) if guild_info_data else None
+
+        return cls(
+            type=data.get("type", 0),
+            user_info=user_info,
+            role_info=role_info,
+            guild_info=guild_info,
+            _raw_data=data,
+        )
+
+
+@dataclass
+class URLInfo(BaseModel):
+    """
+    富文本 - 链接信息
+
+    用于 RichObject 中的 url_info 字段。
+    """
+
+    url: str = ""
+    display_text: str = ""
+
+
+@dataclass
+class EmojiInfo(BaseModel):
+    """
+    富文本 - Emoji信息
+
+    用于 RichObject 中的 emoji_info 字段。
+    """
+
+    id: str = ""
+    type: str = ""
+    name: str = ""
+    url: str = ""
+
+
+@dataclass
+class ChannelInfo(BaseModel):
+    """
+    富文本 - 子频道信息
+
+    用于 RichObject 中的 channel_info 字段。
+    """
+
+    channel_id: int = 0
+    channel_name: str = ""
 
 
 @dataclass
 class RichText(BaseModel):
     """
-    富文本对象
+    富文本对象（对应官方 RichObject）
 
     用于论坛帖子内容。
     """
 
     type: int = 0
-    text_info: Optional[dict] = None
-    at_info: Optional[dict] = None
-    url_info: Optional[dict] = None
-    emoji_info: Optional[dict] = None
-    channel_info: Optional[dict] = None
+    text_info: Optional[TextInfo] = None
+    at_info: Optional[AtInfo] = None
+    url_info: Optional[URLInfo] = None
+    emoji_info: Optional[EmojiInfo] = None
+    channel_info: Optional[ChannelInfo] = None
 
     TYPE_TEXT: ClassVar[int] = 1
     TYPE_AT: ClassVar[int] = 2
     TYPE_URL: ClassVar[int] = 3
     TYPE_EMOJI: ClassVar[int] = 4
     TYPE_CHANNEL: ClassVar[int] = 5
+    TYPE_VIDEO: ClassVar[int] = 10
+    TYPE_IMAGE: ClassVar[int] = 11
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "RichText":
+        if data is None:
+            return None
+
+        text_info_data = data.get("text_info")
+        text_info = TextInfo.from_dict(text_info_data) if text_info_data else None
+
+        at_info_data = data.get("at_info")
+        at_info = AtInfo.from_dict(at_info_data) if at_info_data else None
+
+        url_info_data = data.get("url_info")
+        url_info = URLInfo.from_dict(url_info_data) if url_info_data else None
+
+        emoji_info_data = data.get("emoji_info")
+        emoji_info = EmojiInfo.from_dict(emoji_info_data) if emoji_info_data else None
+
+        channel_info_data = data.get("channel_info")
+        channel_info = (
+            ChannelInfo.from_dict(channel_info_data) if channel_info_data else None
+        )
+
+        return cls(
+            type=data.get("type", 0),
+            text_info=text_info,
+            at_info=at_info,
+            url_info=url_info,
+            emoji_info=emoji_info,
+            channel_info=channel_info,
+            _raw_data=data,
+        )
+
+
+@dataclass
+class TextProps(BaseModel):
+    """
+    富文本 - 文本段落属性
+
+    用于 TextElem 中的 props 字段。
+    """
+
+    font_bold: bool = False
+    italic: bool = False
+    underline: bool = False
+
+
+@dataclass
+class ParagraphProps(BaseModel):
+    """
+    富文本 - 段落属性
+
+    用于 Paragraph 中的 props 字段。
+    """
+
+    alignment: int = 0
 
 
 @dataclass
 class ThreadContentText(BaseModel):
     """
-    帖子内容文本元素
+    帖子内容文本元素（对应官方 TextElem）
 
     用于 ThreadContentElem 中的 text 字段。
     """
 
     text: str = ""
+    props: Optional[TextProps] = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ThreadContentText":
+        if data is None:
+            return None
+
+        props_data = data.get("props")
+        props = TextProps.from_dict(props_data) if props_data else None
+
+        return cls(
+            text=data.get("text", ""),
+            props=props,
+            _raw_data=data,
+        )
 
 
 @dataclass
@@ -428,29 +722,75 @@ class ThreadContentPlatImage(BaseModel):
 @dataclass
 class ThreadContentImage(BaseModel):
     """
-    帖子内容图片元素
+    帖子内容图片元素（对应官方 ImageElem）
 
     用于 ThreadContentElem 中的 image 字段。
     """
 
-    plat_image: Optional["ThreadContentPlatImage"] = None
+    third_url: str = ""
     width_percent: float = 0.0
 
+
+@dataclass
+class ThreadContentPlatVideo(BaseModel):
+    """
+    帖子内容平台视频（对应官方 PlatVideo）
+
+    用于 ThreadContentVideo 中的 plat_video 字段。
+    """
+
+    url: str = ""
+    width: int = 0
+    height: int = 0
+    video_id: str = ""
+    duration: int = 0
+    cover: Optional["ThreadContentPlatImage"] = None
+
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadContentImage":
+    def from_dict(cls, data: dict) -> "ThreadContentPlatVideo":
         if data is None:
             return None
 
-        plat_image_data = data.get("plat_image")
-        plat_image = (
-            ThreadContentPlatImage.from_dict(plat_image_data)
-            if plat_image_data
+        cover_data = data.get("cover")
+        cover = ThreadContentPlatImage.from_dict(cover_data) if cover_data else None
+
+        return cls(
+            url=data.get("url", ""),
+            width=data.get("width", 0),
+            height=data.get("height", 0),
+            video_id=data.get("video_id", ""),
+            duration=data.get("duration", 0),
+            cover=cover,
+            _raw_data=data,
+        )
+
+
+@dataclass
+class ThreadContentVideo(BaseModel):
+    """
+    帖子内容视频元素（对应官方 VideoElem）
+
+    用于 ThreadContentElem 中的 video 字段。
+    """
+
+    third_url: str = ""
+    plat_video: Optional["ThreadContentPlatVideo"] = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ThreadContentVideo":
+        if data is None:
+            return None
+
+        plat_video_data = data.get("plat_video")
+        plat_video = (
+            ThreadContentPlatVideo.from_dict(plat_video_data)
+            if plat_video_data
             else None
         )
 
         return cls(
-            plat_image=plat_image,
-            width_percent=data.get("width_percent", 0.0),
+            third_url=data.get("third_url", ""),
+            plat_video=plat_video,
             _raw_data=data,
         )
 
@@ -458,18 +798,20 @@ class ThreadContentImage(BaseModel):
 @dataclass
 class ThreadContentElem(BaseModel):
     """
-    帖子内容元素
+    帖子内容元素（对应官方 Elem）
 
     用于 ThreadContentParagraph 中的 elems 数组。
     """
 
     type: int = 1
     text: Optional["ThreadContentText"] = None
-    url: Optional["ThreadContentUrl"] = None
     image: Optional["ThreadContentImage"] = None
+    video: Optional["ThreadContentVideo"] = None
+    url: Optional["ThreadContentUrl"] = None
 
     TYPE_TEXT: ClassVar[int] = 1
     TYPE_IMAGE: ClassVar[int] = 2
+    TYPE_VIDEO: ClassVar[int] = 3
     TYPE_URL: ClassVar[int] = 4
 
     @classmethod
@@ -480,17 +822,21 @@ class ThreadContentElem(BaseModel):
         text_data = data.get("text")
         text = ThreadContentText.from_dict(text_data) if text_data else None
 
-        url_data = data.get("url")
-        url = ThreadContentUrl.from_dict(url_data) if url_data else None
-
         image_data = data.get("image")
         image = ThreadContentImage.from_dict(image_data) if image_data else None
+
+        video_data = data.get("video")
+        video = ThreadContentVideo.from_dict(video_data) if video_data else None
+
+        url_data = data.get("url")
+        url = ThreadContentUrl.from_dict(url_data) if url_data else None
 
         return cls(
             type=data.get("type", 1),
             text=text,
-            url=url,
             image=image,
+            video=video,
+            url=url,
             _raw_data=data,
         )
 
@@ -498,13 +844,13 @@ class ThreadContentElem(BaseModel):
 @dataclass
 class ThreadContentParagraph(BaseModel):
     """
-    帖子内容段落
+    帖子内容段落（对应官方 Paragraph）
 
     用于 ThreadContent 中的 paragraphs 数组。
     """
 
     elems: list["ThreadContentElem"] = field(default_factory=list)
-    props: dict = field(default_factory=dict)
+    props: Optional[ParagraphProps] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ThreadContentParagraph":
@@ -514,9 +860,12 @@ class ThreadContentParagraph(BaseModel):
         elems_data = data.get("elems", [])
         elems = [ThreadContentElem.from_dict(e) for e in elems_data if e]
 
+        props_data = data.get("props")
+        props = ParagraphProps.from_dict(props_data) if props_data else None
+
         return cls(
             elems=elems,
-            props=data.get("props", {}),
+            props=props,
             _raw_data=data,
         )
 
@@ -2068,7 +2417,22 @@ class Model:
     ThreadContentUrl = ThreadContentUrl
     ThreadContentImage = ThreadContentImage
     ThreadContentPlatImage = ThreadContentPlatImage
+    ThreadContentVideo = ThreadContentVideo
+    ThreadContentPlatVideo = ThreadContentPlatVideo
     RichText = RichText
+    TextInfo = TextInfo
+    AtInfo = AtInfo
+    AtUserInfo = AtUserInfo
+    AtRoleInfo = AtRoleInfo
+    AtGuildInfo = AtGuildInfo
+    URLInfo = URLInfo
+    EmojiInfo = EmojiInfo
+    ChannelInfo = ChannelInfo
+    TextProps = TextProps
+    ParagraphProps = ParagraphProps
+    AuditType = AuditType
+    AtType = AtType
+    Alignment = Alignment
 
     # 消息相关模型
     Attachment = Attachment

@@ -16,7 +16,7 @@ EasyBot SDK 示例 08：插件 & 权限系统使用方法
 
 from re import compile as re_compile
 
-from easybot import Bot, BotAdminManager, BotCommandObject, CommandValidScenes, Model
+from easybot import Bot, BotAdminManager, CommandValidScenes, Model
 
 
 def main():
