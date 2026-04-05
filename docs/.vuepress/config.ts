@@ -1,6 +1,5 @@
 import { viteBundler } from '@vuepress/bundler-vite'
 import { recoTheme } from 'vuepress-theme-reco'
-import { sitemapPlugin } from '@vuepress/plugin-sitemap'
 import { defineUserConfig } from 'vuepress'
 
 export default defineUserConfig({
@@ -34,14 +33,6 @@ export default defineUserConfig({
       },
     },
   }),
-
-  plugins: [
-    sitemapPlugin({
-      hostname: 'https://sauceplum.github.io/easybot',
-      sitemapFilename: 'sitemap.xml',
-      changefreq: 'weekly',
-    }),
-  ],
 
   theme: recoTheme({
     logo: '/easybot/logo.svg',
