@@ -146,3 +146,7 @@ plugins/
 test/config/config.py
 local.py
 sdk_data/
+node_modules/
+docs/.vuepress/.cache/
+docs/.vuepress/.temp/
+docs/.vuepress/dist/

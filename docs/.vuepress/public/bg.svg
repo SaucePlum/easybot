@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- 多彩渐变 -->
+    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:0.6">
+        <animate attributeName="stop-color" values="#667eea;#f093fb;#667eea" dur="8s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:0.4">
+        <animate attributeName="stop-color" values="#764ba2;#f5576c;#764ba2" dur="8s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    
+    <linearGradient id="gradient2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4facfe;stop-opacity:0.5">
+        <animate attributeName="stop-color" values="#4facfe;#00f2fe;#4facfe" dur="6s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#00f2fe;stop-opacity:0.3">
+        <animate attributeName="stop-color" values="#00f2fe;#4facfe;#00f2fe" dur="6s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    
+    <linearGradient id="gradient3" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#fa709a;stop-opacity:0.4">
+        <animate attributeName="stop-color" values="#fa709a;#fee140;#fa709a" dur="7s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#fee140;stop-opacity:0.3">
+        <animate attributeName="stop-color" values="#fee140;#fa709a;#fee140" dur="7s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    
+    <!-- Python 颜色渐变 -->
+    <linearGradient id="pythonYellow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FFD43B;stop-opacity:0.8"/>
+      <stop offset="100%" style="stop-color:#FFE873;stop-opacity:0.6"/>
+    </linearGradient>
+    
+    <linearGradient id="pythonBlue" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#306998;stop-opacity:0.8"/>
+      <stop offset="100%" style="stop-color:#4B8BBE;stop-opacity:0.6"/>
+    </linearGradient>
+    
+    <!-- 发光滤镜 -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="softGlow">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 动态渐变圆形背景 -->
+  <circle cx="200" cy="150" r="250" fill="url(#gradient1)" opacity="0.6">
+    <animate attributeName="cx" values="200;250;200" dur="10s" repeatCount="indefinite"/>
+    <animate attributeName="cy" values="150;200;150" dur="10s" repeatCount="indefinite"/>
+  </circle>
+  
+  <circle cx="1200" cy="700" r="300" fill="url(#gradient2)" opacity="0.5">
+    <animate attributeName="cx" values="1200;1150;1200" dur="12s" repeatCount="indefinite"/>
+    <animate attributeName="cy" values="700;650;700" dur="12s" repeatCount="indefinite"/>
+  </circle>
+  
+  <circle cx="700" cy="450" r="200" fill="url(#gradient3)" opacity="0.4">
+    <animate attributeName="r" values="200;250;200" dur="8s" repeatCount="indefinite"/>
+  </circle>
+  
+  <circle cx="1000" cy="200" r="150" fill="url(#gradient1)" opacity="0.3">
+    <animate attributeName="cx" values="1000;950;1000" dur="9s" repeatCount="indefinite"/>
+  </circle>
+  
+  <circle cx="400" cy="700" r="180" fill="url(#gradient2)" opacity="0.4">
+    <animate attributeName="cy" values="700;750;700" dur="11s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- Python 蛇形曲线 - 代表 Python SDK -->
+  <path d="M 100 300 Q 200 250 300 280 Q 400 310 500 260 Q 600 210 700 250" 
+        fill="none" stroke="url(#pythonYellow)" stroke-width="8" stroke-linecap="round" filter="url(#glow)" opacity="0.7">
+    <animate attributeName="d" 
+             values="M 100 300 Q 200 250 300 280 Q 400 310 500 260 Q 600 210 700 250;
+                     M 100 310 Q 200 260 300 270 Q 400 300 500 270 Q 600 220 700 240;
+                     M 100 300 Q 200 250 300 280 Q 400 310 500 260 Q 600 210 700 250" 
+             dur="5s" repeatCount="indefinite"/>
+  </path>
+  
+  <path d="M 100 340 Q 200 290 300 320 Q 400 350 500 300 Q 600 250 700 290" 
+        fill="none" stroke="url(#pythonBlue)" stroke-width="8" stroke-linecap="round" filter="url(#glow)" opacity="0.7">
+    <animate attributeName="d" 
+             values="M 100 340 Q 200 290 300 320 Q 400 350 500 300 Q 600 250 700 290;
+                     M 100 350 Q 200 300 300 310 Q 400 340 500 310 Q 600 260 700 280;
+                     M 100 340 Q 200 290 300 320 Q 400 350 500 300 Q 600 250 700 290" 
+             dur="5s" repeatCount="indefinite"/>
+  </path>
+  
+  <!-- 代码装饰元素 -->
+  <g opacity="0.15" font-family="'Fira Code', 'Consolas', monospace" font-size="14" fill="#fff">
+    <text x="50" y="100">
+      <tspan fill="#4facfe">from</tspan> easybot <tspan fill="#4facfe">import</tspan> Bot
+      <animate attributeName="opacity" values="0.15;0.25;0.15" dur="4s" repeatCount="indefinite"/>
+    </text>
+    <text x="80" y="125">
+      <tspan fill="#fa709a">bot</tspan> = Bot(app_id=<tspan fill="#FFE873">"xxx"</tspan>)
+      <animate attributeName="opacity" values="0.15;0.25;0.15" dur="4s" repeatCount="indefinite" begin="0.5s"/>
+    </text>
+    
+    <text x="900" y="150">
+      <tspan fill="#667eea">@bot</tspan>.on_guild_message
+      <animate attributeName="opacity" values="0.15;0.25;0.15" dur="4s" repeatCount="indefinite" begin="1s"/>
+    </text>
+    <text x="930" y="175">
+      <tspan fill="#4facfe">async def</tspan> <tspan fill="#00f2fe">handle</tspan>(msg):
+      <animate attributeName="opacity" values="0.15;0.25;0.15" dur="4s" repeatCount="indefinite" begin="1.5s"/>
+    </text>
+    
+    <text x="1100" y="750">
+      <tspan fill="#4facfe">await</tspan> msg.reply(<tspan fill="#FFE873">"Hello!"</tspan>)
+      <animate attributeName="opacity" values="0.15;0.25;0.15" dur="4s" repeatCount="indefinite" begin="2s"/>
+    </text>
+    
+    <text x="50" y="800">
+      bot.<tspan fill="#fa709a">start</tspan>()
+      <animate attributeName="opacity" values="0.15;0.25;0.15" dur="4s" repeatCount="indefinite" begin="2.5s"/>
+    </text>
+  </g>
+  
+  <!-- 浮动代码块装饰 -->
+  <g filter="url(#softGlow)">
+    <!-- 左上角代码块 -->
+    <rect x="50" y="400" width="200" height="80" rx="8" fill="rgba(102,126,234,0.1)" stroke="rgba(102,126,234,0.3)" stroke-width="1">
+      <animate attributeName="y" values="400;390;400" dur="6s" repeatCount="indefinite"/>
+    </rect>
+    <text x="60" y="425" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.5)">WebSocket</text>
+    <text x="60" y="445" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.4)">Webhook</text>
+    <text x="60" y="465" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.3)">Remote Webhook</text>
+    
+    <!-- 右下角代码块 -->
+    <rect x="1150" y="500" width="220" height="100" rx="8" fill="rgba(79,172,254,0.1)" stroke="rgba(79,172,254,0.3)" stroke-width="1">
+      <animate attributeName="y" values="500;510;500" dur="7s" repeatCount="indefinite"/>
+    </rect>
+    <text x="1160" y="525" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.5)">GuildMessage</text>
+    <text x="1160" y="545" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.4)">GroupMessage</text>
+    <text x="1160" y="565" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.3)">DirectMessage</text>
+    <text x="1160" y="585" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.2)">C2CMessage</text>
+  </g>
+  
+  <!-- 动态粒子 -->
+  <circle cx="150" cy="500" r="4" fill="#667eea" opacity="0.6">
+    <animate attributeName="cy" values="500;480;500" dur="3s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0.8;0.6" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="350" cy="200" r="3" fill="#4facfe" opacity="0.5">
+    <animate attributeName="cy" values="200;180;200" dur="4s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="600" cy="600" r="5" fill="#fa709a" opacity="0.4">
+    <animate attributeName="cx" values="600;620;600" dur="5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="850" cy="350" r="3" fill="#FFE873" opacity="0.6">
+    <animate attributeName="cy" values="350;330;350" dur="3.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="1050" cy="600" r="4" fill="#00f2fe" opacity="0.5">
+    <animate attributeName="cx" values="1050;1030;1050" dur="4.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="1300" cy="300" r="3" fill="#764ba2" opacity="0.6">
+    <animate attributeName="cy" values="300;280;300" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- 连接线 - 代表数据流 -->
+  <path d="M 200 450 Q 400 400 600 450" fill="none" stroke="rgba(102,126,234,0.2)" stroke-width="2" stroke-dasharray="10,5">
+    <animate attributeName="stroke-dashoffset" values="0;30" dur="2s" repeatCount="indefinite"/>
+  </path>
+  <path d="M 800 550 Q 1000 500 1200 550" fill="none" stroke="rgba(79,172,254,0.2)" stroke-width="2" stroke-dasharray="10,5">
+    <animate attributeName="stroke-dashoffset" values="0;30" dur="2s" repeatCount="indefinite"/>
+  </path>
+</svg>

@@ -4,6 +4,7 @@
 
 [![Language](https://img.shields.io/badge/language-python-green.svg?style=plastic)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg?style=plastic)](https://github.com/SaucePlum/easybot/blob/master/LICENSE)
+[![Pypi](https://img.shields.io/pypi/dw/easybot-qq?style=plastic&color=blue)](https://pypi.org/project/easybot-qq/)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/f015549b3dba4602be2fe0f5d8b0a8d5)](https://app.codacy.com/gh/SaucePlum/easybot/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 ✨ 轻量级 QQ 官方机器人 SDK，极简 API 设计，~6 行代码即可启动 ✨

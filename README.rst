@@ -2,6 +2,8 @@
    :alt: easybot
    :target: https://github.com/SaucePlum/easybot
 
+|
+
 .. image:: https://img.shields.io/badge/language-python-green.svg?style=plastic
     :target: https://www.python.org/
     :alt: Python
@@ -14,9 +16,11 @@
     :target: https://app.codacy.com/gh/SaucePlum/easybot/dashboard
     :alt: Codacy
 
-✨ 轻量级 QQ 官方机器人 SDK，极简 API 设计，~6 行代码即可启动 ✨
+.. image:: https://img.shields.io/pypi/dw/easybot-qq?style=plastic&color=blue
+   :target: https://pypi.org/project/easybot-qq/
+   :alt: Pypi Downloads
 
-|Python Version| |License| |PyPI Version|
+✨ 轻量级 QQ 官方机器人 SDK，极简 API 设计，~6 行代码即可启动 ✨
 
 简介
 ====
@@ -30,7 +34,7 @@
 - 🎯 **零继承装饰器范式** — ``@bot.on_guild_message`` 直接用，告别繁琐的 Client 子类重写
 - 📦 **最小依赖** — 仅需 ``aiohttp`` + ``pyyaml`` 两个第三方库，安装即用
 - 🔧 **三协议全支持** — WebSocket / Webhook / Remote Webhook 自由切换，适配任意部署环境
-- � **全场景消息覆盖** — 频道、群聊、C2C 私聊、频道私信四大场景一站搞定
+- 🌐 **全场景消息覆盖** — 频道、群聊、C2C 私聊、频道私信四大场景一站搞定
 - 💬 **内置会话管理器** — Session + WaitFor 多轮对话原生支持，带超时回复与 GC 回收（业界独有）
 - 🧩 **插件自动加载** — 扫描目录自动注册指令与预处理器，开箱即用的插件生态
 - 🎮 **增强指令系统** — 正则匹配 / 管理员权限 / 短路机制 / 多场景隔离 / 预处理器五合一
@@ -212,10 +216,3 @@ Remote Webhook      内网穿透 / 远程中转
 - 作者：小念同学
 - 邮箱：2660422452@qq.com
 - GitHub：https://github.com/SaucePlum/easybot
-
-.. |Python Version| image:: https://img.shields.io/badge/python-3.10+-blue.svg
-   :target: https://www.python.org/downloads/
-.. |License| image:: https://img.shields.io/badge/license-MIT-green.svg
-   :target: https://github.com/SaucePlum/easybot/blob/main/LICENSE
-.. |PyPI Version| image:: https://img.shields.io/pypi/v/easybot-qq.svg
-   :target: https://pypi.org/project/easybot-qq/
