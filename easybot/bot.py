@@ -167,6 +167,7 @@ class Bot:
         适用于需要在外部管理事件循环的场景
         """
         self._running = True
+        self.logger.info(f"机器人正在启动... (AppID: {self.app_id})")
 
         if self.is_debug:
             self.logger.debug("调试模式已开启，将输出详细调试信息")
