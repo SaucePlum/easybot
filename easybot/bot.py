@@ -1152,10 +1152,13 @@ class Bot:
                 self.logger.info(f"从Plugins注册指令：{cmd.func.__name__}")
 
         preprocessor_count = sum(len(v) for v in Plugins._preprocessors.values())
-        for intents, v in Plugins._preprocessors.items():
-            scope = CommandValidScenes.get_name(intents)
-            for func in v:
-                self.logger.info(f"从Plugins注册 {scope} 预处理器：{func.__name__}")
+        if preprocessor_count > 0:
+            preprocessor_info = []
+            for intents, v in Plugins._preprocessors.items():
+                scope = CommandValidScenes.get_name(intents)
+                func_names = ", ".join([func.__name__ for func in v])
+                preprocessor_info.append(f"{scope}: {func_names}")
+            self.logger.info(f"从Plugins注册预处理器：{'; '.join(preprocessor_info)}")
 
         command_count = len(enabled_commands)
         if command_count or preprocessor_count > 0:
