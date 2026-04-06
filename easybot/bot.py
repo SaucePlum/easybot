@@ -151,7 +151,6 @@ class Bot:
         使用初始化时配置的协议（WebSocket/Webhook/Remote Webhook）
         这是一个阻塞方法，会一直运行直到机器人停止
         """
-        self.logger.info(f"正在启动机器人 (AppID: {self.app_id})")
         try:
             asyncio.run(self.start_async())
         except KeyboardInterrupt:
@@ -168,7 +167,6 @@ class Bot:
         适用于需要在外部管理事件循环的场景
         """
         self._running = True
-        self.logger.info(f"机器人正在启动... (AppID: {self.app_id})")
 
         if self.is_debug:
             self.logger.debug("调试模式已开启，将输出详细调试信息")
