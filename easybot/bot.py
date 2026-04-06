@@ -1136,6 +1136,12 @@ class Bot:
             self.logger.info("没有找到可加载的插件")
 
     def _log_registered_plugins(self) -> None:
+        preprocessor_count = sum(len(v) for v in Plugins._preprocessors.values())
+        for intents, v in Plugins._preprocessors.items():
+            scope = CommandValidScenes.get_name(intents)
+            for func in v:
+                self.logger.info(f"从Plugins注册 {scope} 预处理器：{func.__name__}")
+
         enabled_commands = [cmd for cmd in Plugins._commands if cmd.enabled]
         for cmd in enabled_commands:
             if cmd.command:
@@ -1150,12 +1156,6 @@ class Bot:
                 )
             else:
                 self.logger.info(f"从Plugins注册指令：{cmd.func.__name__}")
-
-        preprocessor_count = sum(len(v) for v in Plugins._preprocessors.values())
-        for intents, v in Plugins._preprocessors.items():
-            scope = CommandValidScenes.get_name(intents)
-            for func in v:
-                self.logger.info(f"从Plugins注册 {scope} 预处理器：{func.__name__}")
 
         command_count = len(enabled_commands)
         if command_count or preprocessor_count > 0:
