@@ -140,6 +140,10 @@ class Bot:
             f"protocol={type(self.protocol).__name__}, retry={is_retry}, timeout={api_timeout}s"
         )
 
+        # 预加载插件以注册必要的Intent
+        if self.auto_load_plugins:
+            self._preload_plugins_for_intents()
+
     def start(self) -> None:
         """
         启动机器人
@@ -1016,6 +1020,42 @@ class Bot:
         self._lifecycle.register_shutdown(func)
         return func
 
+    def _preload_plugins_for_intents(self) -> None:
+        """
+        预加载插件以注册必要的Intent
+
+        在初始化阶段执行，用于注册插件中定义的Intent，确保事件订阅日志在初始化阶段输出
+        """
+        plugins_path = Path(self.plugins_dir)
+        if not plugins_path.exists():
+            return
+
+        if not plugins_path.is_dir():
+            return
+
+        plugins_dir_str = str(plugins_path.absolute())
+        if plugins_dir_str not in sys.path:
+            sys.path.insert(0, plugins_dir_str)
+
+        pattern = "**/*.py" if self.plugins_recursive else "*.py"
+        plugin_files = list(plugins_path.glob(pattern))
+
+        for plugin_file in plugin_files:
+            if plugin_file.name.startswith("_") or plugin_file.name == "__init__.py":
+                continue
+
+            try:
+                module_name = plugin_file.stem
+                spec = importlib.util.spec_from_file_location(module_name, plugin_file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+            except Exception as e:
+                self.logger.error(f"预加载插件 {plugin_file.name} 时出错: {e}")
+
+        # 注册插件中的Intent
+        self._register_plugin_intents()
+
     def load_plugins(self) -> None:
         """
         加载插件目录中的插件
@@ -1092,7 +1132,6 @@ class Bot:
 
         if loaded_count > 0:
             self._log_registered_plugins()
-            self._register_plugin_intents()
         else:
             self.logger.info("没有找到可加载的插件")
 
@@ -1135,7 +1174,8 @@ class Bot:
         由协议客户端在成功连接后调用。
         """
         self.logger.info("【加载阶段】开始")
-        self.load_plugins()
+        # 插件已经在初始化阶段预加载，这里只需要记录插件注册信息
+        self._log_registered_plugins()
         await self._initialize_bot_info()
         self.logger.info("【加载阶段】完成")
         self.logger.info("【就绪阶段】开始")
