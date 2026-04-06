@@ -383,8 +383,8 @@ class WebSocketClient(BaseWebSocketClient):
             self._logger.debug(
                 f"READY 事件: version={data.get('version')}, shard={data.get('shard')}"
             )
+            self._logger.info("【认证阶段】完成")
             await self._bot._trigger_startup()
-            self._logger.info("机器人启动成功")
             return
 
         if event_type == "RESUMED":
@@ -409,11 +409,8 @@ class WebSocketClient(BaseWebSocketClient):
         http_client = await self._bot.api._get_http()
         access_token = await http_client.get_access_token()
 
-        intents = self._bot._intents
-        if intents == 0:
-            for event_type in self._bot._event_handlers.keys():
-                self._bot._intent_calculator.register_event(event_type)
-            intents = self._bot._intent_calculator.get_intent_value()
+        # 使用IntentCalculator计算的Intent值
+        intents = self._bot._intent_calculator.get_intent_value()
 
         payload = {
             "op": 2,

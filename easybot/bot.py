@@ -140,6 +140,10 @@ class Bot:
             f"protocol={type(self.protocol).__name__}, retry={is_retry}, timeout={api_timeout}s"
         )
 
+        # 预加载插件以注册必要的Intent
+        if self.auto_load_plugins:
+            self._preload_plugins_for_intents()
+
     def start(self) -> None:
         """
         启动机器人
@@ -147,7 +151,6 @@ class Bot:
         使用初始化时配置的协议（WebSocket/Webhook/Remote Webhook）
         这是一个阻塞方法，会一直运行直到机器人停止
         """
-        self.logger.info(f"正在启动机器人 (AppID: {self.app_id})")
         try:
             asyncio.run(self.start_async())
         except KeyboardInterrupt:
@@ -171,6 +174,9 @@ class Bot:
             self.logger.debug(
                 f"计算后的 Intent 值: {self._intents} (0x{self._intents:X})"
             )
+
+        self.logger.info("【初始化阶段】完成")
+        self.logger.info("【连接阶段】开始")
 
         # 启动会话管理器
         self._session_manager.start(asyncio.get_event_loop())
@@ -1013,6 +1019,42 @@ class Bot:
         self._lifecycle.register_shutdown(func)
         return func
 
+    def _preload_plugins_for_intents(self) -> None:
+        """
+        预加载插件以注册必要的Intent
+
+        在初始化阶段执行，用于注册插件中定义的Intent，确保事件订阅日志在初始化阶段输出
+        """
+        plugins_path = Path(self.plugins_dir)
+        if not plugins_path.exists():
+            return
+
+        if not plugins_path.is_dir():
+            return
+
+        plugins_dir_str = str(plugins_path.absolute())
+        if plugins_dir_str not in sys.path:
+            sys.path.insert(0, plugins_dir_str)
+
+        pattern = "**/*.py" if self.plugins_recursive else "*.py"
+        plugin_files = list(plugins_path.glob(pattern))
+
+        for plugin_file in plugin_files:
+            if plugin_file.name.startswith("_") or plugin_file.name == "__init__.py":
+                continue
+
+            try:
+                module_name = plugin_file.stem
+                spec = importlib.util.spec_from_file_location(module_name, plugin_file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+            except Exception as e:
+                self.logger.error(f"预加载插件 {plugin_file.name} 时出错: {e}")
+
+        # 注册插件中的Intent
+        self._register_plugin_intents()
+
     def load_plugins(self) -> None:
         """
         加载插件目录中的插件
@@ -1089,31 +1131,30 @@ class Bot:
 
         if loaded_count > 0:
             self._log_registered_plugins()
-            self._register_plugin_intents()
         else:
             self.logger.info("没有找到可加载的插件")
 
     def _log_registered_plugins(self) -> None:
-        enabled_commands = [cmd for cmd in Plugins._commands if cmd.enabled]
-        for cmd in enabled_commands:
-            if cmd.command:
-                cmd_names = ", ".join(cmd.command)
-                self.logger.info(
-                    f"从Plugins注册指令：[{cmd_names}] -> {cmd.func.__name__}"
-                )
-            elif cmd.regex:
-                regex_patterns = [r.pattern for r in cmd.regex]
-                self.logger.info(
-                    f"从Plugins注册正则指令：[{', '.join(regex_patterns)}] -> {cmd.func.__name__}"
-                )
-            else:
-                self.logger.info(f"从Plugins注册指令：{cmd.func.__name__}")
-
         preprocessor_count = sum(len(v) for v in Plugins._preprocessors.values())
         for intents, v in Plugins._preprocessors.items():
             scope = CommandValidScenes.get_name(intents)
             for func in v:
                 self.logger.info(f"从Plugins注册 {scope} 预处理器：{func.__name__}")
+
+        enabled_commands = [cmd for cmd in Plugins._commands if cmd.enabled]
+        for cmd in enabled_commands:
+            if cmd.command:
+                cmd_names = ", ".join(cmd.command)
+                self.logger.info(
+                    f"从Plugins注册指令：[{cmd_names}]"
+                )
+            elif cmd.regex:
+                regex_patterns = [r.pattern for r in cmd.regex]
+                self.logger.info(
+                    f"从Plugins注册正则指令：[{', '.join(regex_patterns)}]"
+                )
+            else:
+                self.logger.info(f"从Plugins注册指令")
 
         command_count = len(enabled_commands)
         if command_count or preprocessor_count > 0:
@@ -1123,7 +1164,7 @@ class Bot:
 
     def _register_plugin_intents(self) -> None:
         for cmd in Plugins._commands:
-            self._update_intents_for_scenes(cmd.valid_scenes, source="Plugins")
+            self._update_intents_for_scenes(cmd.valid_scenes)
 
     async def _trigger_startup(self) -> None:
         """
@@ -1131,10 +1172,16 @@ class Bot:
 
         由协议客户端在成功连接后调用。
         """
-        self.load_plugins()
+        self.logger.info("【加载阶段】开始")
+        # 插件已经在初始化阶段预加载，这里只需要记录插件注册信息
+        self._log_registered_plugins()
         await self._initialize_bot_info()
+        self.logger.info("【加载阶段】完成")
+        self.logger.info("【就绪阶段】开始")
         await self._lifecycle.trigger_startup()
         self._lifecycle.start_timer()
+        self.logger.info("【就绪阶段】完成")
+        self.logger.info("机器人已成功启动，进入运行状态")
 
     async def _initialize_bot_info(self) -> None:
         """初始化机器人信息"""
@@ -1257,7 +1304,7 @@ class Bot:
         return wrap
 
     def _update_intents_for_scenes(
-        self, valid_scenes: CommandValidScenes, source: str = "on_command"
+        self, valid_scenes: CommandValidScenes
     ) -> None:
         """
         根据命令的有效场景更新 Intent 值
@@ -1266,31 +1313,24 @@ class Bot:
 
         Args:
             valid_scenes: 命令的有效场景位掩码
-            source: 调用来源标识，用于日志记录
         """
         if valid_scenes & CommandValidScenes.GUILD:
-            if not (self._intents & Intent.GUILD_MESSAGES) and not (
-                self._intents & Intent.PUBLIC_GUILD_MESSAGES
+            if not self._intent_calculator.has_intent(Intent.GUILD_MESSAGES) and not (
+                self._intent_calculator.has_intent(Intent.PUBLIC_GUILD_MESSAGES)
             ):
                 if self.is_private:
-                    self._intents = self._intents | Intent.GUILD_MESSAGES
-                    self.logger.debug(
-                        f"[{source}] 注册私域频道消息 Intent (GUILD_MESSAGES)"
-                    )
+                    # 通过_register_handler注册私域频道消息事件
+                    self._register_handler("MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.GUILD_MESSAGES)
                 else:
-                    self._intents = self._intents | Intent.PUBLIC_GUILD_MESSAGES
-                    self.logger.debug(
-                        f"[{source}] 注册公域频道消息 Intent (PUBLIC_GUILD_MESSAGES)"
-                    )
+                    # 通过_register_handler注册公域频道消息事件
+                    self._register_handler("AT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.PUBLIC_GUILD_MESSAGES)
         if valid_scenes & CommandValidScenes.DM:
-            if not (self._intents & Intent.DIRECT_MESSAGE):
-                self._intents = self._intents | Intent.DIRECT_MESSAGE
-                self.logger.debug(f"[{source}] 注册私信 Intent (DIRECT_MESSAGE)")
+            if not self._intent_calculator.has_intent(Intent.DIRECT_MESSAGE):
+                # 通过_register_handler注册私信事件
+                self._register_handler("DIRECT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.DIRECT_MESSAGE)
         if (valid_scenes & CommandValidScenes.GROUP) or (
             valid_scenes & CommandValidScenes.C2C
         ):
-            if not (self._intents & Intent.GROUP_AND_C2C_EVENT):
-                self._intents = self._intents | Intent.GROUP_AND_C2C_EVENT
-                self.logger.debug(
-                    f"[{source}] 注册群聊/单聊 Intent (GROUP_AND_C2C_EVENT)"
-                )
+            if not self._intent_calculator.has_intent(Intent.GROUP_AND_C2C_EVENT):
+                # 通过_register_handler注册群聊事件
+                self._register_handler("GROUP_AT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.GROUP_AND_C2C_EVENT)
