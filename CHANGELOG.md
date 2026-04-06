@@ -33,6 +33,14 @@ All notable changes to this project will be documented in this file.
   - 添加 GitHub Actions CI 自动部署工作流
   - 配置站点主题、导航和资源文件
 
+- **插件热重载功能**: 大幅增强插件系统的运行时管理能力
+  - Bot 类新增 `reload_plugin()`、`reload_all_plugins()`、`unload_plugin()` 等热重载 API
+  - Bot 类新增 `enable_command()`、`disable_command()`、`remove_command()` 命令动态管理接口
+  - Plugins 类扩展，支持命令启用/禁用、插件卸载/重载、完整查询接口
+  - 新增 `clear_all_plugins()` 一键清空所有已加载插件
+  - 事件分发器优化，支持更灵活的事件处理和调度
+  - 新增 [examples/13_hot_reload.py](examples/13_hot_reload.py) 完整示例
+
 ### 改进 (Improvements)
 
 - **消息类型处理优化**: 将 `MessageBase` 抽象基类替换为具体消息类型的联合类型（Union），提升类型安全性和代码可读性
@@ -52,15 +60,20 @@ All notable changes to this project will be documented in this file.
 
 ```
 easybot/__init__.py          # 公共 API 导出调整
-easybot/bot.py               # 启动链路重构与优化
+easybot/bot.py               # 启动链路重构 + 热重载 API
 easybot/builders.py          # 新文件：重构自 messages_model.py
 easybot/models.py            # 消息类型优化、新增帖子相关模型
 easybot/session.py           # 会话管理优化
 easybot/api.py               # create_thread 支持 JSON 格式
-easybot/_internal/ws_client.py # WebSocket 连接管理优化
-easybot/_internal/reply_strategy.py # 回复策略微调
+easybot/plugins.py           # 插件系统大幅扩展（热重载、命令管理）
+easybot/_internal/event_dispatcher.py  # 事件分发器优化
+easybot/_internal/event_utils.py       # 事件工具函数调整
+easybot/_internal/ws_client.py         # WebSocket 连接管理优化
+easybot/_internal/reply_strategy.py    # 回复策略微调
 easybot/version.py           # 版本号更新
-examples/08_plugins_permissions.py # 示例代码适配
+examples/08_plugins_permissions.py     # 示例代码适配
+examples/13_hot_reload.py              # 新增：热重载功能示例
+docs/07_插件与权限.md                  # 插件文档更新
 ```
 
 ## [1.0.0] - 初始版本
