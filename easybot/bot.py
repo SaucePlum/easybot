@@ -1153,12 +1153,27 @@ class Bot:
 
         preprocessor_count = sum(len(v) for v in Plugins._preprocessors.values())
         if preprocessor_count > 0:
-            preprocessor_info = []
-            for intents, v in Plugins._preprocessors.items():
-                scope = CommandValidScenes.get_name(intents)
-                func_names = ", ".join([func.__name__ for func in v])
-                preprocessor_info.append(f"{scope}: {func_names}")
-            self.logger.info(f"从Plugins注册预处理器：{'; '.join(preprocessor_info)}")
+            # 收集所有唯一的预处理器函数名
+            unique_preprocessors = set()
+            for v in Plugins._preprocessors.values():
+                for func in v:
+                    unique_preprocessors.add(func.__name__)
+            
+            # 如果只有一个预处理器函数，直接输出
+            if len(unique_preprocessors) == 1:
+                func_name = next(iter(unique_preprocessors))
+                self.logger.info(f"从Plugins注册预处理器：{func_name}")
+            else:
+                # 否则按场景分组输出
+                preprocessor_info = []
+                for intents, v in Plugins._preprocessors.items():
+                    scope = CommandValidScenes.get_name(intents)
+                    # 去重函数名
+                    unique_funcs = set([func.__name__ for func in v])
+                    if unique_funcs:
+                        func_names = ", ".join(unique_funcs)
+                        preprocessor_info.append(f"{scope}: {func_names}")
+                self.logger.info(f"从Plugins注册预处理器：{'; '.join(preprocessor_info)}")
 
         command_count = len(enabled_commands)
         if command_count or preprocessor_count > 0:
