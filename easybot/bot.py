@@ -1147,15 +1147,15 @@ class Bot:
             if cmd.command:
                 cmd_names = ", ".join(cmd.command)
                 self.logger.info(
-                    f"从Plugins注册指令：[{cmd_names}] -> {cmd.func.__name__}"
+                    f"从Plugins注册指令：[{cmd_names}]"
                 )
             elif cmd.regex:
                 regex_patterns = [r.pattern for r in cmd.regex]
                 self.logger.info(
-                    f"从Plugins注册正则指令：[{', '.join(regex_patterns)}] -> {cmd.func.__name__}"
+                    f"从Plugins注册正则指令：[{', '.join(regex_patterns)}]"
                 )
             else:
-                self.logger.info(f"从Plugins注册指令：{cmd.func.__name__}")
+                self.logger.info(f"从Plugins注册指令")
 
         command_count = len(enabled_commands)
         if command_count or preprocessor_count > 0:
