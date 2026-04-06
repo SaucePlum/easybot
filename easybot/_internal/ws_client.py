@@ -383,8 +383,8 @@ class WebSocketClient(BaseWebSocketClient):
             self._logger.debug(
                 f"READY 事件: version={data.get('version')}, shard={data.get('shard')}"
             )
+            self._logger.info("【认证阶段】完成")
             await self._bot._trigger_startup()
-            self._logger.info("机器人启动成功")
             return
 
         if event_type == "RESUMED":

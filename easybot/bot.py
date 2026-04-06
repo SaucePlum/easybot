@@ -172,6 +172,9 @@ class Bot:
                 f"计算后的 Intent 值: {self._intents} (0x{self._intents:X})"
             )
 
+        self.logger.info("【初始化阶段】完成")
+        self.logger.info("【连接阶段】开始")
+
         # 启动会话管理器
         self._session_manager.start(asyncio.get_event_loop())
 
@@ -1123,7 +1126,7 @@ class Bot:
 
     def _register_plugin_intents(self) -> None:
         for cmd in Plugins._commands:
-            self._update_intents_for_scenes(cmd.valid_scenes, source="Plugins")
+            self._update_intents_for_scenes(cmd.valid_scenes)
 
     async def _trigger_startup(self) -> None:
         """
@@ -1131,10 +1134,15 @@ class Bot:
 
         由协议客户端在成功连接后调用。
         """
+        self.logger.info("【加载阶段】开始")
         self.load_plugins()
         await self._initialize_bot_info()
+        self.logger.info("【加载阶段】完成")
+        self.logger.info("【就绪阶段】开始")
         await self._lifecycle.trigger_startup()
         self._lifecycle.start_timer()
+        self.logger.info("【就绪阶段】完成")
+        self.logger.info("机器人已成功启动，进入运行状态")
 
     async def _initialize_bot_info(self) -> None:
         """初始化机器人信息"""
@@ -1257,7 +1265,7 @@ class Bot:
         return wrap
 
     def _update_intents_for_scenes(
-        self, valid_scenes: CommandValidScenes, source: str = "on_command"
+        self, valid_scenes: CommandValidScenes
     ) -> None:
         """
         根据命令的有效场景更新 Intent 值
@@ -1266,7 +1274,6 @@ class Bot:
 
         Args:
             valid_scenes: 命令的有效场景位掩码
-            source: 调用来源标识，用于日志记录
         """
         if valid_scenes & CommandValidScenes.GUILD:
             if not (self._intents & Intent.GUILD_MESSAGES) and not (
@@ -1274,23 +1281,17 @@ class Bot:
             ):
                 if self.is_private:
                     self._intents = self._intents | Intent.GUILD_MESSAGES
-                    self.logger.debug(
-                        f"[{source}] 注册私域频道消息 Intent (GUILD_MESSAGES)"
-                    )
+                    self.logger.debug("注册私域频道消息 Intent (GUILD_MESSAGES)")
                 else:
                     self._intents = self._intents | Intent.PUBLIC_GUILD_MESSAGES
-                    self.logger.debug(
-                        f"[{source}] 注册公域频道消息 Intent (PUBLIC_GUILD_MESSAGES)"
-                    )
+                    self.logger.debug("注册公域频道消息 Intent (PUBLIC_GUILD_MESSAGES)")
         if valid_scenes & CommandValidScenes.DM:
             if not (self._intents & Intent.DIRECT_MESSAGE):
                 self._intents = self._intents | Intent.DIRECT_MESSAGE
-                self.logger.debug(f"[{source}] 注册私信 Intent (DIRECT_MESSAGE)")
+                self.logger.debug("注册私信 Intent (DIRECT_MESSAGE)")
         if (valid_scenes & CommandValidScenes.GROUP) or (
             valid_scenes & CommandValidScenes.C2C
         ):
             if not (self._intents & Intent.GROUP_AND_C2C_EVENT):
                 self._intents = self._intents | Intent.GROUP_AND_C2C_EVENT
-                self.logger.debug(
-                    f"[{source}] 注册群聊/单聊 Intent (GROUP_AND_C2C_EVENT)"
-                )
+                self.logger.debug("注册群聊/单聊 Intent (GROUP_AND_C2C_EVENT)")
