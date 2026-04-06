@@ -240,6 +240,7 @@ class Bot:
             intent: Intent 值
         """
         self._event_handlers[event_type] = func
+        self._intents |= intent
         self._intent_calculator.register_event(event_type)
         display_name = EVENT_DISPLAY_NAMES.get(event_type, event_type)
         self.logger.info(f"{display_name}事件订阅成功")
@@ -1279,22 +1280,18 @@ class Bot:
                 self._intent_calculator.has_intent(Intent.PUBLIC_GUILD_MESSAGES)
             ):
                 if self.is_private:
-                    # 注册私域频道消息事件
-                    self._intent_calculator.register_event("MESSAGE_CREATE")
-                    self.logger.debug("注册私域频道消息 Intent (GUILD_MESSAGES)")
+                    # 通过_register_handler注册私域频道消息事件
+                    self._register_handler("MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.GUILD_MESSAGES)
                 else:
-                    # 注册公域频道消息事件
-                    self._intent_calculator.register_event("AT_MESSAGE_CREATE")
-                    self.logger.debug("注册公域频道消息 Intent (PUBLIC_GUILD_MESSAGES)")
+                    # 通过_register_handler注册公域频道消息事件
+                    self._register_handler("AT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.PUBLIC_GUILD_MESSAGES)
         if valid_scenes & CommandValidScenes.DM:
             if not self._intent_calculator.has_intent(Intent.DIRECT_MESSAGE):
-                # 注册私信事件
-                self._intent_calculator.register_event("DIRECT_MESSAGE_CREATE")
-                self.logger.debug("注册私信 Intent (DIRECT_MESSAGE)")
+                # 通过_register_handler注册私信事件
+                self._register_handler("DIRECT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.DIRECT_MESSAGE)
         if (valid_scenes & CommandValidScenes.GROUP) or (
             valid_scenes & CommandValidScenes.C2C
         ):
             if not self._intent_calculator.has_intent(Intent.GROUP_AND_C2C_EVENT):
-                # 注册群聊事件
-                self._intent_calculator.register_event("GROUP_AT_MESSAGE_CREATE")
-                self.logger.debug("注册群聊/单聊 Intent (GROUP_AND_C2C_EVENT)")
+                # 通过_register_handler注册群聊事件
+                self._register_handler("GROUP_AT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.GROUP_AND_C2C_EVENT)
