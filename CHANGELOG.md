@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.2] - 2026-04-07
+
+### 改进 (Improvements)
+
+- **事件分发器优化**: 进一步完善命令匹配和执行逻辑，提升事件处理的健壮性
+
+### 变更文件清单
+
+```
+easybot/version.py                       # 版本号更新
+easybot/_internal/event_dispatcher.py     # 事件分发器优化
+```
+
 ## [1.0.1] - 2026-04-07
 
 ### 新增 (Features)

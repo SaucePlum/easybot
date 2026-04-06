@@ -320,10 +320,12 @@ class EventDispatcher:
 
             if asyncio.iscoroutinefunction(best_cmd.func):
                 if best_cmd.is_custom_short_circuit:
-                    result = await self._execute_command(best_cmd, model)
+                    result = await self._execute_command_with_result(best_cmd, model)
                     should_short_circuit = bool(result)
                 else:
-                    asyncio.create_task(self._execute_command(best_cmd, model))
+                    asyncio.create_task(
+                        self._execute_command_with_result(best_cmd, model)
+                    )
                     should_short_circuit = best_cmd.short_circuit
             else:
                 result = best_cmd.func(model)
@@ -339,9 +341,11 @@ class EventDispatcher:
 
         return False
 
-    async def _execute_command(self, cmd: Any, model: Any) -> Any:
+    async def _execute_command_with_result(self, cmd: Any, model: Any) -> Any:
         """
-        异步执行命令回调
+        异步执行命令回调并返回结果
+
+        用于需要获取命令执行返回值的场景（如自定义短路判断）
 
         Args:
             cmd: 命令对象
