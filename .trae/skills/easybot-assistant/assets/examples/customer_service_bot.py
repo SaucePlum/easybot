@@ -9,9 +9,14 @@
 """
 
 import os
+
 from easybot import (
-    Bot, Model, MessagesModel, CommandValidScenes,
-    Scope, WaitTimeoutError
+    Bot,
+    CommandValidScenes,
+    MessagesModel,
+    Model,
+    Scope,
+    WaitTimeoutError,
 )
 
 bot = Bot(
@@ -24,18 +29,28 @@ FAQ_DATA = {
     "账号": {
         "q": "账号相关问题",
         "a": "账号问题包括：注册、登录、密码找回、账号安全等。",
-        "items": ["如何注册账号？", "忘记密码怎么办？", "如何修改绑定手机？", "账号被盗怎么办？"]
+        "items": [
+            "如何注册账号？",
+            "忘记密码怎么办？",
+            "如何修改绑定手机？",
+            "账号被盗怎么办？",
+        ],
     },
     "支付": {
         "q": "支付相关问题",
         "a": "支付问题包括：充值、提现、退款、支付失败等。",
-        "items": ["支持哪些支付方式？", "充值多久到账？", "如何申请退款？", "支付失败怎么办？"]
+        "items": [
+            "支持哪些支付方式？",
+            "充值多久到账？",
+            "如何申请退款？",
+            "支付失败怎么办？",
+        ],
     },
     "功能": {
         "q": "功能使用问题",
         "a": "功能问题包括：功能介绍、使用教程、常见操作等。",
-        "items": ["如何使用XX功能？", "功能限制说明", "如何开通会员？", "功能更新日志"]
-    }
+        "items": ["如何使用XX功能？", "功能限制说明", "如何开通会员？", "功能更新日志"],
+    },
 }
 
 ANSWERS = {
@@ -49,90 +64,110 @@ ANSWERS = {
     "支付失败怎么办？": "❌ 支付失败排查：\n1. 检查网络连接\n2. 确认余额充足\n3. 更换支付方式\n4. 联系银行客服",
 }
 
+
 def build_faq_keyboard():
     rows = []
     for cat in FAQ_DATA:
-        rows.append({
+        rows.append(
+            {
+                "buttons": [
+                    {
+                        "render_data": {
+                            "label": f"📋 {FAQ_DATA[cat]['q']}",
+                            "style": 1,
+                        },
+                        "action": {"type": 1, "data": f"faq:{cat}"},
+                    }
+                ]
+            }
+        )
+    rows.append(
+        {
             "buttons": [
                 {
-                    "render_data": {"label": f"📋 {FAQ_DATA[cat]['q']}", "style": 1},
-                    "action": {"type": 1, "data": f"faq:{cat}"}
+                    "render_data": {"label": "👤 转人工客服", "style": 2},
+                    "action": {"type": 1, "data": "human_service"},
                 }
             ]
-        })
-    rows.append({
-        "buttons": [
-            {
-                "render_data": {"label": "👤 转人工客服", "style": 2},
-                "action": {"type": 1, "data": "human_service"}
-            }
-        ]
-    })
+        }
+    )
     return rows
+
 
 def build_question_keyboard(category: str):
     items = FAQ_DATA[category]["items"]
     rows = []
     for item in items:
-        rows.append({
+        rows.append(
+            {
+                "buttons": [
+                    {
+                        "render_data": {"label": item[:20], "style": 1},
+                        "action": {"type": 1, "data": f"answer:{item}"},
+                    }
+                ]
+            }
+        )
+    rows.append(
+        {
             "buttons": [
                 {
-                    "render_data": {"label": item[:20], "style": 1},
-                    "action": {"type": 1, "data": f"answer:{item}"}
+                    "render_data": {"label": "🔙 返回分类", "style": 2},
+                    "action": {"type": 1, "data": "back_to_menu"},
                 }
             ]
-        })
-    rows.append({
-        "buttons": [
-            {
-                "render_data": {"label": "🔙 返回分类", "style": 2},
-                "action": {"type": 1, "data": "back_to_menu"}
-            }
-        ]
-    })
+        }
+    )
     return rows
+
 
 @bot.on_startup
 async def on_startup(event: Model.StartupEvent):
     bot.logger.info("🤖 客服问答机器人已启动")
 
+
 @bot.on_command(command=["客服", "帮助", "help"], valid_scenes=CommandValidScenes.ALL)
-async def customer_service(msg: Model.MessageBase):
+async def customer_service(
+    msg: (
+        Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage
+    ),
+):
     embed = MessagesModel.MessageEmbed(
         title="🤖 智能客服",
         prompt="欢迎使用智能客服",
         content=[
             "请选择问题分类",
             "或直接输入您的问题",
-        ]
+        ],
     )
     await msg.reply(embed)
-    
+
     md = MessagesModel.MessageMarkdown(
-        content="请选择：",
-        keyboard_content={"rows": build_faq_keyboard()}
+        content="请选择：", keyboard_content={"rows": build_faq_keyboard()}
     )
     await msg.reply(md)
+
 
 @bot.on_interaction
 async def handle_interaction(msg: Model.Interaction):
     button_data = msg.data.resolved.button_data
     await bot.api.respond_interaction(interaction_id=msg.id, code=0)
-    
+
     if button_data == "back_to_menu":
         embed = MessagesModel.MessageEmbed(
-            title="🤖 智能客服",
-            prompt="请选择问题分类",
-            content=["请选择问题分类"]
+            title="🤖 智能客服", prompt="请选择问题分类", content=["请选择问题分类"]
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=embed, event_id=msg.id)
-        
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=embed, event_id=msg.id
+        )
+
         md = MessagesModel.MessageMarkdown(
-            content="请选择：",
-            keyboard_content={"rows": build_faq_keyboard()}
+            content="请选择：", keyboard_content={"rows": build_faq_keyboard()}
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=md, event_id=msg.id)
-    
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=md, event_id=msg.id
+        )
+
     elif button_data == "human_service":
         embed = MessagesModel.MessageEmbed(
             title="👤 人工客服",
@@ -140,41 +175,47 @@ async def handle_interaction(msg: Model.Interaction):
             content=[
                 "排队中，请稍候...",
                 "预计等待时间：2分钟",
-            ]
+            ],
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=embed, event_id=msg.id)
-    
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=embed, event_id=msg.id
+        )
+
     elif button_data.startswith("faq:"):
         category = button_data.split(":")[1]
         info = FAQ_DATA[category]
-        
+
         embed = MessagesModel.MessageEmbed(
             title=f"📋 {info['q']}",
-            prompt=info['q'],
+            prompt=info["q"],
             content=[
-                info['a'],
+                info["a"],
                 "请选择具体问题：",
-            ]
+            ],
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=embed, event_id=msg.id)
-        
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=embed, event_id=msg.id
+        )
+
         md = MessagesModel.MessageMarkdown(
             content="请选择：",
-            keyboard_content={"rows": build_question_keyboard(category)}
+            keyboard_content={"rows": build_question_keyboard(category)},
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=md, event_id=msg.id)
-    
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=md, event_id=msg.id
+        )
+
     elif button_data.startswith("answer:"):
         question = button_data.split(":", 1)[1]
         answer = ANSWERS.get(question, "抱歉，暂无此问题的答案，请联系人工客服。")
-        
+
         embed = MessagesModel.MessageEmbed(
-            title=f"❓ {question}",
-            prompt=question[:20],
-            content=[answer]
+            title=f"❓ {question}", prompt=question[:20], content=[answer]
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=embed, event_id=msg.id)
-        
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=embed, event_id=msg.id
+        )
+
         md = MessagesModel.MessageMarkdown(
             content="问题是否解决？",
             keyboard_content={
@@ -183,19 +224,21 @@ async def handle_interaction(msg: Model.Interaction):
                         "buttons": [
                             {
                                 "render_data": {"label": "✅ 问题已解决", "style": 1},
-                                "action": {"type": 1, "data": "resolved"}
+                                "action": {"type": 1, "data": "resolved"},
                             },
                             {
                                 "render_data": {"label": "❌ 未解决", "style": 2},
-                                "action": {"type": 1, "data": "unresolved"}
-                            }
+                                "action": {"type": 1, "data": "unresolved"},
+                            },
                         ]
                     }
                 ]
-            }
+            },
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=md, event_id=msg.id)
-    
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=md, event_id=msg.id
+        )
+
     elif button_data == "resolved":
         embed = MessagesModel.MessageEmbed(
             title="✅ 感谢您的反馈",
@@ -203,23 +246,27 @@ async def handle_interaction(msg: Model.Interaction):
             content=[
                 "很高兴能帮到您！",
                 "如有其他问题，随时联系客服",
-            ]
+            ],
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=embed, event_id=msg.id)
-    
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=embed, event_id=msg.id
+        )
+
     elif button_data == "unresolved":
         embed = MessagesModel.MessageEmbed(
-            title="😔 很抱歉",
-            prompt="问题未解决",
-            content=["建议您转接人工客服"]
+            title="😔 很抱歉", prompt="问题未解决", content=["建议您转接人工客服"]
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=embed, event_id=msg.id)
-        
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=embed, event_id=msg.id
+        )
+
         md = MessagesModel.MessageMarkdown(
-            content="请选择：",
-            keyboard_content={"rows": build_faq_keyboard()}
+            content="请选择：", keyboard_content={"rows": build_faq_keyboard()}
         )
-        await bot.api.send_c2c_message(openid=msg.user_openid, content=md, event_id=msg.id)
+        await bot.api.send_c2c_message(
+            openid=msg.user_openid, content=md, event_id=msg.id
+        )
+
 
 if __name__ == "__main__":
     bot.start()

@@ -21,7 +21,7 @@ bot = Bot(
 )
 
 @bot.on_command(command="猜数字", valid_scenes=CommandValidScenes.ALL)
-async def guess_number_game(msg: Model.MessageBase):
+async def guess_number_game(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """启动猜数字游戏"""
     target = random.randint(1, 100)
     attempts = 0
@@ -109,7 +109,7 @@ async def guess_number_game(msg: Model.MessageBase):
                 break
 
 @bot.on_command(command="继续", valid_scenes=CommandValidScenes.ALL)
-async def continue_game(msg: Model.MessageBase):
+async def continue_game(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """继续未完成的游戏"""
     with bot.session.bind(msg) as s:
         session = s.get(Scope.USER, "guess_game")

@@ -72,7 +72,7 @@ async def handle_guild(msg: Model.GuildMessage) -> None:
     await msg.reply("收到")
 
 @bot.on_command(command="test")
-async def test_cmd(msg: Model.MessageBase) -> None:
+async def test_cmd(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage) -> None:
     result: Optional[str] = process_message(msg.treated_msg)
     if result:
         await msg.reply(result)
@@ -212,7 +212,7 @@ async def handle(msg: Model.GuildMessage):
         except Exception:
             pass  # 发送错误消息失败时忽略
 
-async def process_message(msg: Model.MessageBase) -> None:
+async def process_message(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage) -> None:
     # 业务逻辑
     pass
 ```

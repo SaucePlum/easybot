@@ -12,6 +12,7 @@ from collections import namedtuple
 from collections.abc import Sequence as ABCSequence
 from contextlib import contextmanager
 from functools import wraps
+from re import Pattern
 from time import time
 from typing import (
     TYPE_CHECKING,
@@ -26,7 +27,7 @@ from typing import (
 )
 
 from .builders import MessagesModel
-from .models import Model
+from .models import C2CMessage, DirectMessage, GroupMessage, GuildMessage, Model
 from .plugins import BotCommandObject, CommandValidScenes
 
 if TYPE_CHECKING:
@@ -335,11 +336,11 @@ class BoundSession:
     async def wait_for(
         self,
         scopes: Union[str, Sequence[str]],
-        command: Any = None,
+        command: Union[str, Sequence[str], Pattern[str], None] = None,
         timeout: Optional[int] = None,
         predicate: Optional[Callable[[Any], bool]] = None,
         on_timeout: Optional[Callable[[], Any]] = None,
-    ) -> Model.MessageBase:
+    ) -> Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]:
         """
         等待用户发送匹配的消息
 
@@ -358,7 +359,11 @@ class BoundSession:
             on_timeout: 超时时的回调函数
 
         Returns:
-            Model.MessageBase: 匹配的消息对象
+            匹配的消息对象，类型取决于消息来源场景：
+                - GuildMessage: 频道消息
+                - GroupMessage: 群聊消息
+                - C2CMessage: 单聊消息
+                - DirectMessage: 频道私信消息
 
         Raises:
             WaitError: 等待任务被意外删除
@@ -831,8 +836,8 @@ class SessionManager:
         obj,
         scope: str,
         key: Hashable,
-        data: Dict = None,
-        identify: Hashable = None,
+        data: Dict | None = None,
+        identify: Hashable | None = None,
         is_replace: bool = True,
         timeout: Optional[float] = None,
         timeout_reply: Optional[
@@ -1076,11 +1081,11 @@ class SessionManager:
     async def wait_for(
         self,
         scopes: Union[str, Sequence[str]],
-        command: Any = None,
+        command: Union[str, Sequence[str], Pattern[str], None] = None,
         timeout: Optional[int] = None,
         predicate: Optional[Callable[[Any], bool]] = None,
         on_timeout: Optional[Callable[[], Any]] = None,
-    ) -> Model.MessageBase:
+    ) -> Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]:
         """
         等待指定的命令被触发
 
@@ -1100,7 +1105,11 @@ class SessionManager:
             on_timeout: 超时回调函数，在抛出异常前调用
 
         Returns:
-            Model.MessageBase: 匹配的消息对象
+            匹配的消息对象，类型取决于消息来源场景：
+                - GuildMessage: 频道消息
+                - GroupMessage: 群聊消息
+                - C2CMessage: 单聊消息
+                - DirectMessage: 频道私信消息
 
         Raises:
             ValueError: 未绑定消息对象
@@ -1177,7 +1186,7 @@ class SessionManager:
         self,
         scope: str,
         key: Hashable,
-        data: Dict = None,
+        data: Dict | None = None,
         identify: Hashable = None,
         is_replace: bool = True,
         timeout: Optional[float] = None,
@@ -1327,7 +1336,9 @@ class SessionManager:
         if self.__is_auto_commit:
             self.commit_data(is_info=False)
 
-    def wait_for_message_checker(self, obj: Model) -> List[WaitForCommandCallback]:
+    def wait_for_message_checker(
+        self, obj: Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]
+    ) -> List[WaitForCommandCallback]:
         """
         检查收到的消息是否匹配任何 wait_for 注册
 

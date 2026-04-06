@@ -178,7 +178,7 @@ async def group_cmd(msg: Model.GroupMessage):
 async def c2c_cmd(msg: Model.C2CMessage):
     await msg.reply("私聊命令执行")
 
-# 多场景或全部场景 -> 使用 Union 或 MessageBase
+# 多场景或全部场景 -> 使用 Union 类型
 @bot.on_command(
     command=["hello", "你好"],
     valid_scenes=CommandValidScenes.GUILD | CommandValidScenes.GROUP,
@@ -191,13 +191,21 @@ async def hello_cmd(msg: Model.GuildMessage | Model.GroupMessage):
         print(msg.group_openid)
     await msg.reply("你好！")
 
-# 全部场景 -> 使用 MessageBase
+# 全部场景 -> 使用 Union 类型
 @bot.on_command(
     command="全局命令",
     valid_scenes=CommandValidScenes.ALL,
 )
-async def global_cmd(msg: Model.MessageBase):
+async def global_cmd(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     # 四种场景都可能，需判断类型
+    if isinstance(msg, Model.GuildMessage):
+        print(f"频道: {msg.channel_id}")
+    elif isinstance(msg, Model.GroupMessage):
+        print(f"群聊: {msg.group_openid}")
+    elif isinstance(msg, Model.C2CMessage):
+        print(f"单聊: {msg.author.user_openid}")
+    else:
+        print(f"私信: {msg.author.id}")
     await msg.reply("全局命令执行")
 ```
 
@@ -209,7 +217,7 @@ async def global_cmd(msg: Model.MessageBase):
 from easybot import Scope, WaitTimeoutError, Model
 
 @bot.on_command(command="猜数字", valid_scenes=CommandValidScenes.ALL)
-async def guess_game(msg: Model.MessageBase):
+async def guess_game(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     import random
     target = random.randint(1, 100)
     
@@ -316,9 +324,9 @@ bot = Bot(
     is_debug=True,
 )
 
-# 预处理器：多场景使用 MessageBase
+# 预处理器：多场景使用 Union 类型
 @bot.before_command(valid_scenes=CommandValidScenes.ALL)
-async def log_message(msg: Model.MessageBase):
+async def log_message(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     bot.logger.info(f"收到消息: {msg.treated_msg}")
 
 # 事件处理器：使用具体类型
@@ -328,7 +336,7 @@ async def on_guild(msg: Model.GuildMessage):
 
 # 命令处理器：根据 valid_scenes 选择类型
 @bot.on_command(command="ping", valid_scenes=CommandValidScenes.ALL)
-async def ping(msg: Model.MessageBase):
+async def ping(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     await msg.reply("pong!")
 
 bot.start()
@@ -340,14 +348,14 @@ bot.start()
 from easybot import Plugins, CommandValidScenes, Model
 
 @Plugins.before_command(valid_scenes=CommandValidScenes.ALL)
-def preprocessor(msg: Model.MessageBase):
+def preprocessor(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     print(f"预处理: {msg.treated_msg}")
 
 @Plugins.on_command(
     command=["help", "帮助"],
     valid_scenes=CommandValidScenes.ALL
 )
-async def help_command(msg: Model.MessageBase):
+async def help_command(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     await msg.reply("这是帮助信息")
 
 def register(bot):
@@ -376,7 +384,7 @@ def register(bot):
 | `CommandValidScenes.C2C` | `Model.C2CMessage` | 仅单聊 |
 | `CommandValidScenes.DM` | `Model.DirectMessage` | 仅频道私信 |
 | 多场景组合 | `Union` 或 `\|` 语法 | 如 `GuildMessage \| GroupMessage` |
-| `CommandValidScenes.ALL` | `Model.MessageBase` | 四种场景都可能 |
+| `CommandValidScenes.ALL` | `GuildMessage \| GroupMessage \| C2CMessage \| DirectMessage` | 四种场景都可能 |
 
 ### 多场景类型提示示例
 
@@ -430,4 +438,31 @@ async def test_cmd(msg: Model.GuildMessage | Model.GroupMessage):
 
 ---
 
-**注意：** 本技能基于 EasyBot SDK 最新版本，如遇 API 变更请参考官方文档。
+## 外部资源
+
+当需要更详细的 API 文档或模型字段时，请使用以下资源：
+
+### Context7 文档查询
+
+使用 Context7 查询最新的 SDK 文档：
+
+```
+Library ID: /SaucePlum/easybot
+```
+
+查询示例：
+- "如何使用 wait_for 实现多轮对话"
+- "MessageEmbed 的所有参数"
+- "如何获取频道成员列表"
+
+### 官方链接
+
+| 资源 | 链接 |
+|------|------|
+| GitHub 仓库 | https://github.com/SaucePlum/easybot |
+| 文档网站 | https://sauceplum.github.io/easybot/ |
+| PyPI 包 | https://pypi.org/project/easybot-qq/ |
+
+---
+
+**注意：** 本技能基于 EasyBot SDK 最新版本，如遇 API 变更请参考官方文档或使用 Context7 查询。

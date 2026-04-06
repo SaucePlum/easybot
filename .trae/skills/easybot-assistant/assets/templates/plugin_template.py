@@ -8,28 +8,40 @@ EasyBot 插件开发模板
 - 插件注册函数
 """
 
-from easybot import Bot, Plugins, CommandValidScenes, Model
+from easybot import Bot, CommandValidScenes, Model, Plugins
+
 
 @Plugins.before_command(valid_scenes=CommandValidScenes.ALL)
-def preprocessor(msg: Model.MessageBase):
+def preprocessor(
+    msg: (
+        Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage
+    ),
+):
     print(f"[插件预处理] {msg.treated_msg}")
+
 
 @Plugins.on_command(
     command=["plugin_cmd", "插件命令"],
     valid_scenes=CommandValidScenes.ALL,
-    is_short_circuit=True
+    is_short_circuit=True,
 )
-async def plugin_command(msg: Model.MessageBase):
+async def plugin_command(
+    msg: (
+        Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage
+    ),
+):
     await msg.reply("插件命令执行成功！")
+
 
 @Plugins.on_command(
     command="admin_cmd",
     valid_scenes=CommandValidScenes.GUILD,
     is_require_admin=True,
-    admin_error_msg="此命令需要频道管理员权限"
+    admin_error_msg="此命令需要频道管理员权限",
 )
 async def admin_command(msg: Model.GuildMessage):
     await msg.reply("管理员命令执行成功！")
+
 
 def register(bot: Bot):
     bot.logger.info("示例插件已加载")

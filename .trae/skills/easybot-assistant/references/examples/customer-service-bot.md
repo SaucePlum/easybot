@@ -71,7 +71,7 @@ def build_faq_keyboard():
     return rows
 
 @bot.on_command(command=["客服", "帮助", "help"], valid_scenes=CommandValidScenes.ALL)
-async def customer_service(msg: Model.MessageBase):
+async def customer_service(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     # 发送 Embed 消息
     embed = MessagesModel.MessageEmbed(
         title="🤖 智能客服",

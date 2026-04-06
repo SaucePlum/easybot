@@ -38,14 +38,14 @@ def save_todos(todos: dict) -> None:
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(todos, f, ensure_ascii=False, indent=2)
 
-def get_user_key(msg: Model.MessageBase) -> str:
+def get_user_key(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage) -> str:
     """获取用户唯一标识"""
     if hasattr(msg.author, 'id'):
         return msg.author.id
     return msg.author.user_openid
 
 @bot.on_command(command=["待办", "todo"], valid_scenes=CommandValidScenes.ALL)
-async def todo_menu(msg: Model.MessageBase):
+async def todo_menu(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """待办事项菜单"""
     await msg.reply(
         "📋 待办事项管理\n"
@@ -58,7 +58,7 @@ async def todo_menu(msg: Model.MessageBase):
     )
 
 @bot.on_command(command="添加", valid_scenes=CommandValidScenes.ALL)
-async def add_todo(msg: Model.MessageBase):
+async def add_todo(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """添加待办事项"""
     content = msg.treated_msg.replace("添加", "").strip()
     
@@ -86,7 +86,7 @@ async def add_todo(msg: Model.MessageBase):
     await msg.reply(f"✅ 已添加待办：{content}")
 
 @bot.on_command(command=["列表", "list"], valid_scenes=CommandValidScenes.ALL)
-async def list_todos(msg: Model.MessageBase):
+async def list_todos(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """查看待办列表"""
     user_key = get_user_key(msg)
     todos = load_todos()
@@ -107,7 +107,7 @@ async def list_todos(msg: Model.MessageBase):
     await msg.reply("\n".join(lines))
 
 @bot.on_command(command="完成", valid_scenes=CommandValidScenes.ALL)
-async def complete_todo(msg: Model.MessageBase):
+async def complete_todo(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """标记待办完成"""
     try:
         todo_id = int(msg.treated_msg.replace("完成", "").strip())
@@ -132,7 +132,7 @@ async def complete_todo(msg: Model.MessageBase):
     await msg.reply(f"❌ 未找到编号为 {todo_id} 的待办")
 
 @bot.on_command(command="删除", valid_scenes=CommandValidScenes.ALL)
-async def delete_todo(msg: Model.MessageBase):
+async def delete_todo(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """删除待办事项"""
     try:
         todo_id = int(msg.treated_msg.replace("删除", "").strip())
@@ -157,7 +157,7 @@ async def delete_todo(msg: Model.MessageBase):
     await msg.reply(f"❌ 未找到编号为 {todo_id} 的待办")
 
 @bot.on_command(command="清空", valid_scenes=CommandValidScenes.ALL)
-async def clear_todos(msg: Model.MessageBase):
+async def clear_todos(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """清空所有待办"""
     with bot.session.bind(msg) as s:
         await msg.reply("⚠️ 确定要清空所有待办吗？回复「确认」继续")
@@ -184,7 +184,7 @@ async def clear_todos(msg: Model.MessageBase):
             await msg.reply("⏰ 操作已取消")
 
 @bot.on_command(command="统计", valid_scenes=CommandValidScenes.ALL)
-async def todo_stats(msg: Model.MessageBase):
+async def todo_stats(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """待办统计"""
     user_key = get_user_key(msg)
     todos = load_todos()

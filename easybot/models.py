@@ -13,7 +13,7 @@ EasyBot SDK 数据模型模块
 
 from dataclasses import MISSING, dataclass, field
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, ClassVar, Optional, TypeAlias, TypeVar, Union
 
 if TYPE_CHECKING:
     from ._internal.reply_strategy import ReplyStrategy
@@ -2398,119 +2398,112 @@ class Model:
     所有数据模型都可以通过 Model.xxx 访问。
     """
 
-    # 基础模型
-    BaseModel = BaseModel
-    MessageBase = MessageBase
+    BaseModel: TypeAlias = BaseModel
+    MessageBase: TypeAlias = MessageBase
 
-    # 用户相关模型
-    Author = Author
-    Member = Member
-    MemberWithGuildID = MemberWithGuildID
+    Author: TypeAlias = Author
+    Member: TypeAlias = Member
+    MemberWithGuildID: TypeAlias = MemberWithGuildID
 
-    # 频道相关模型
-    Guild = Guild
-    Channel = Channel
-    Thread = Thread
-    ThreadInfo = ThreadInfo
-    ThreadListResult = ThreadListResult
-    ThreadDetail = ThreadDetail
-    ThreadContent = ThreadContent
-    ThreadContentParagraph = ThreadContentParagraph
-    ThreadContentElem = ThreadContentElem
-    ThreadContentText = ThreadContentText
-    ThreadContentUrl = ThreadContentUrl
-    ThreadContentImage = ThreadContentImage
-    ThreadContentPlatImage = ThreadContentPlatImage
-    ThreadContentVideo = ThreadContentVideo
-    ThreadContentPlatVideo = ThreadContentPlatVideo
-    RichText = RichText
-    TextInfo = TextInfo
-    AtInfo = AtInfo
-    AtUserInfo = AtUserInfo
-    AtRoleInfo = AtRoleInfo
-    AtGuildInfo = AtGuildInfo
-    URLInfo = URLInfo
-    EmojiInfo = EmojiInfo
-    ChannelInfo = ChannelInfo
-    TextProps = TextProps
-    ParagraphProps = ParagraphProps
-    AuditType = AuditType
-    AtType = AtType
-    Alignment = Alignment
+    Guild: TypeAlias = Guild
+    Channel: TypeAlias = Channel
+    Thread: TypeAlias = Thread
+    ThreadInfo: TypeAlias = ThreadInfo
+    ThreadListResult: TypeAlias = ThreadListResult
+    ThreadDetail: TypeAlias = ThreadDetail
+    ThreadContent: TypeAlias = ThreadContent
+    ThreadContentParagraph: TypeAlias = ThreadContentParagraph
+    ThreadContentElem: TypeAlias = ThreadContentElem
+    ThreadContentText: TypeAlias = ThreadContentText
+    ThreadContentUrl: TypeAlias = ThreadContentUrl
+    ThreadContentImage: TypeAlias = ThreadContentImage
+    ThreadContentPlatImage: TypeAlias = ThreadContentPlatImage
+    ThreadContentVideo: TypeAlias = ThreadContentVideo
+    ThreadContentPlatVideo: TypeAlias = ThreadContentPlatVideo
+    RichText: TypeAlias = RichText
+    TextInfo: TypeAlias = TextInfo
+    AtInfo: TypeAlias = AtInfo
+    AtUserInfo: TypeAlias = AtUserInfo
+    AtRoleInfo: TypeAlias = AtRoleInfo
+    AtGuildInfo: TypeAlias = AtGuildInfo
+    URLInfo: TypeAlias = URLInfo
+    EmojiInfo: TypeAlias = EmojiInfo
+    ChannelInfo: TypeAlias = ChannelInfo
+    TextProps: TypeAlias = TextProps
+    ParagraphProps: TypeAlias = ParagraphProps
+    AuditType: TypeAlias = AuditType
+    AtType: TypeAlias = AtType
+    Alignment: TypeAlias = Alignment
 
-    # 消息相关模型
-    Attachment = Attachment
-    GuildMessage = GuildMessage
-    GroupMessage = GroupMessage
-    C2CMessage = C2CMessage
-    DirectMessage = DirectMessage
-    MessageEmbed = MessageEmbed
-    MessageEmbedThumbnail = MessageEmbedThumbnail
-    MessageEmbedField = MessageEmbedField
-    MessageArk = MessageArk
-    MessageArkKv = MessageArkKv
-    MessageArkObj = MessageArkObj
-    MessageArkObjKv = MessageArkObjKv
-    MessageReference = MessageReference
-    MessageMarkdown = MessageMarkdown
-    MessageMarkdownParams = MessageMarkdownParams
-    MessageButton = MessageButton
-    MessageButtonPermission = MessageButtonPermission
+    Attachment: TypeAlias = Attachment
+    GuildMessage: TypeAlias = GuildMessage
+    GroupMessage: TypeAlias = GroupMessage
+    C2CMessage: TypeAlias = C2CMessage
+    DirectMessage: TypeAlias = DirectMessage
+    MessageEmbed: TypeAlias = MessageEmbed
+    MessageEmbedThumbnail: TypeAlias = MessageEmbedThumbnail
+    MessageEmbedField: TypeAlias = MessageEmbedField
+    MessageArk: TypeAlias = MessageArk
+    MessageArkKv: TypeAlias = MessageArkKv
+    MessageArkObj: TypeAlias = MessageArkObj
+    MessageArkObjKv: TypeAlias = MessageArkObjKv
+    MessageReference: TypeAlias = MessageReference
+    MessageMarkdown: TypeAlias = MessageMarkdown
+    MessageMarkdownParams: TypeAlias = MessageMarkdownParams
+    MessageButton: TypeAlias = MessageButton
+    MessageButtonPermission: TypeAlias = MessageButtonPermission
 
-    # 事件相关模型
-    MessageDelete = MessageDelete
-    MessageAudited = MessageAudited
-    MessageReaction = MessageReaction
-    ReactionTarget = ReactionTarget
-    Emoji = Emoji
-    AudioControl = AudioControl
-    AudioAction = AudioAction
-    LiveChannelMember = LiveChannelMember
-    Post = Post
-    PostInfo = PostInfo
-    Reply = Reply
-    ReplyInfo = ReplyInfo
-    AuditResult = AuditResult
-    OpenForumEvent = OpenForumEvent
-    GroupEvent = GroupEvent
-    FriendEvent = FriendEvent
-    Interaction = Interaction
-    InteractionData = InteractionData
-    InteractionDataResolved = InteractionDataResolved
+    MessageDelete: TypeAlias = MessageDelete
+    MessageAudited: TypeAlias = MessageAudited
+    MessageReaction: TypeAlias = MessageReaction
+    ReactionTarget: TypeAlias = ReactionTarget
+    Emoji: TypeAlias = Emoji
+    AudioControl: TypeAlias = AudioControl
+    AudioAction: TypeAlias = AudioAction
+    LiveChannelMember: TypeAlias = LiveChannelMember
+    Post: TypeAlias = Post
+    PostInfo: TypeAlias = PostInfo
+    Reply: TypeAlias = Reply
+    ReplyInfo: TypeAlias = ReplyInfo
+    AuditResult: TypeAlias = AuditResult
+    OpenForumEvent: TypeAlias = OpenForumEvent
+    GroupEvent: TypeAlias = GroupEvent
+    FriendEvent: TypeAlias = FriendEvent
+    Interaction: TypeAlias = Interaction
+    InteractionData: TypeAlias = InteractionData
+    InteractionDataResolved: TypeAlias = InteractionDataResolved
 
-    # Gateway 协议模型
-    OpCode = OpCode
-    Payload = Payload
+    OpCode: TypeAlias = OpCode
+    Payload: TypeAlias = Payload
 
-    # API响应模型
-    APIPermission = APIPermission
-    Role = Role
-    ChannelPermissions = ChannelPermissions
-    DMS = DMS
-    RecommendChannel = RecommendChannel
-    Announces = Announces
-    Schedule = Schedule
-    PinsMessage = PinsMessage
-    ReactionUsers = ReactionUsers
-    FileInfo = FileInfo
-    MessageSetting = MessageSetting
-    APIPermissionDemandIdentify = APIPermissionDemandIdentify
-    APIPermissionDemand = APIPermissionDemand
-    SessionStartLimit = SessionStartLimit
-    GatewayResponse = GatewayResponse
-    GatewayBotResponse = GatewayBotResponse
-    GuildRolesResponse = GuildRolesResponse
-    CreateRoleResponse = CreateRoleResponse
-    RoleMembersResponse = RoleMembersResponse
-    OnlineNumsResponse = OnlineNumsResponse
-    CreateThreadResponse = CreateThreadResponse
-    CreateCommentResponse = CreateCommentResponse
-    C2CSendMessageResponse = C2CSendMessageResponse
-    GroupSendMessageResponse = GroupSendMessageResponse
-    APIPermissionListResponse = APIPermissionListResponse
-    UrlLinkResponse = UrlLinkResponse
-    MuteBatchResponse = MuteBatchResponse
-    StreamMessageResponse = StreamMessageResponse
-    StreamInputMode = StreamInputMode
-    StreamInputState = StreamInputState
-    StreamContentType = StreamContentType
+    APIPermission: TypeAlias = APIPermission
+    Role: TypeAlias = Role
+    ChannelPermissions: TypeAlias = ChannelPermissions
+    DMS: TypeAlias = DMS
+    RecommendChannel: TypeAlias = RecommendChannel
+    Announces: TypeAlias = Announces
+    Schedule: TypeAlias = Schedule
+    PinsMessage: TypeAlias = PinsMessage
+    ReactionUsers: TypeAlias = ReactionUsers
+    FileInfo: TypeAlias = FileInfo
+    MessageSetting: TypeAlias = MessageSetting
+    APIPermissionDemandIdentify: TypeAlias = APIPermissionDemandIdentify
+    APIPermissionDemand: TypeAlias = APIPermissionDemand
+    SessionStartLimit: TypeAlias = SessionStartLimit
+    GatewayResponse: TypeAlias = GatewayResponse
+    GatewayBotResponse: TypeAlias = GatewayBotResponse
+    GuildRolesResponse: TypeAlias = GuildRolesResponse
+    CreateRoleResponse: TypeAlias = CreateRoleResponse
+    RoleMembersResponse: TypeAlias = RoleMembersResponse
+    OnlineNumsResponse: TypeAlias = OnlineNumsResponse
+    CreateThreadResponse: TypeAlias = CreateThreadResponse
+    CreateCommentResponse: TypeAlias = CreateCommentResponse
+    C2CSendMessageResponse: TypeAlias = C2CSendMessageResponse
+    GroupSendMessageResponse: TypeAlias = GroupSendMessageResponse
+    APIPermissionListResponse: TypeAlias = APIPermissionListResponse
+    UrlLinkResponse: TypeAlias = UrlLinkResponse
+    MuteBatchResponse: TypeAlias = MuteBatchResponse
+    StreamMessageResponse: TypeAlias = StreamMessageResponse
+    StreamInputMode: TypeAlias = StreamInputMode
+    StreamInputState: TypeAlias = StreamInputState
+    StreamContentType: TypeAlias = StreamContentType
