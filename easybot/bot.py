@@ -1145,9 +1145,7 @@ class Bot:
         for cmd in enabled_commands:
             if cmd.command:
                 cmd_names = ", ".join(cmd.command)
-                self.logger.info(
-                    f"从Plugins注册指令：[{cmd_names}]"
-                )
+                self.logger.info(f"从Plugins注册指令：[{cmd_names}]")
             elif cmd.regex:
                 regex_patterns = [r.pattern for r in cmd.regex]
                 self.logger.info(
@@ -1303,9 +1301,7 @@ class Bot:
 
         return wrap
 
-    def _update_intents_for_scenes(
-        self, valid_scenes: CommandValidScenes
-    ) -> None:
+    def _update_intents_for_scenes(self, valid_scenes: CommandValidScenes) -> None:
         """
         根据命令的有效场景更新 Intent 值
 
@@ -1320,17 +1316,33 @@ class Bot:
             ):
                 if self.is_private:
                     # 通过_register_handler注册私域频道消息事件
-                    self._register_handler("MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.GUILD_MESSAGES)
+                    self._register_handler(
+                        "MESSAGE_CREATE",
+                        lambda *args, **kwargs: None,
+                        Intent.GUILD_MESSAGES,
+                    )
                 else:
                     # 通过_register_handler注册公域频道消息事件
-                    self._register_handler("AT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.PUBLIC_GUILD_MESSAGES)
+                    self._register_handler(
+                        "AT_MESSAGE_CREATE",
+                        lambda *args, **kwargs: None,
+                        Intent.PUBLIC_GUILD_MESSAGES,
+                    )
         if valid_scenes & CommandValidScenes.DM:
             if not self._intent_calculator.has_intent(Intent.DIRECT_MESSAGE):
                 # 通过_register_handler注册私信事件
-                self._register_handler("DIRECT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.DIRECT_MESSAGE)
+                self._register_handler(
+                    "DIRECT_MESSAGE_CREATE",
+                    lambda *args, **kwargs: None,
+                    Intent.DIRECT_MESSAGE,
+                )
         if (valid_scenes & CommandValidScenes.GROUP) or (
             valid_scenes & CommandValidScenes.C2C
         ):
             if not self._intent_calculator.has_intent(Intent.GROUP_AND_C2C_EVENT):
                 # 通过_register_handler注册群聊事件
-                self._register_handler("GROUP_AT_MESSAGE_CREATE", lambda *args, **kwargs: None, Intent.GROUP_AND_C2C_EVENT)
+                self._register_handler(
+                    "GROUP_AT_MESSAGE_CREATE",
+                    lambda *args, **kwargs: None,
+                    Intent.GROUP_AND_C2C_EVENT,
+                )
