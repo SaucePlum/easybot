@@ -163,9 +163,10 @@ class Channel(BaseModel):
     # 类型常量
     TYPE_TEXT: ClassVar[int] = 0           # 文字频道
     TYPE_VOICE: ClassVar[int] = 2          # 语音频道
-    TYPE_LIVE: ClassVar[int] = 4           # 直播频道
-    TYPE_CATEGORY: ClassVar[int] = 10005   # 分组
-    TYPE_FORUM: ClassVar[int] = 10006      # 论坛频道
+    TYPE_CATEGORY: ClassVar[int] = 4       # 分组
+    TYPE_LIVE: ClassVar[int] = 10005       # 直播频道
+    TYPE_APP: ClassVar[int] = 10006        # 应用频道
+    TYPE_FORUM: ClassVar[int] = 10007      # 论坛频道
 ```
 
 ---

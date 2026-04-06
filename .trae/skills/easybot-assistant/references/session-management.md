@@ -128,6 +128,42 @@ with bot.session.bind(msg) as s:
 
 `wait_for` 是实现多轮对话的核心方法。
 
+### 方法签名
+
+```python
+async def wait_for(
+    self,
+    scopes: Union[str, Sequence[str]],
+    command: Union[str, Sequence[str], Pattern[str], None] = None,
+    timeout: Optional[int] = None,
+    predicate: Optional[Callable[[Any], bool]] = None,
+    on_timeout: Optional[Callable[[], Any]] = None,
+) -> Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]:
+    """
+    等待用户发送匹配的消息
+
+    Args:
+        scopes: 作用域，可以是单个作用域或作用域列表
+        command: 命令匹配，支持字符串、字符串列表、正则表达式或 None（接受任意输入）
+        timeout: 超时时间（秒）
+        predicate: 自定义过滤函数
+        on_timeout: 超时回调函数
+
+    Returns:
+        匹配的消息对象，类型取决于消息来源场景：
+            - GuildMessage: 频道消息
+            - GroupMessage: 群聊消息
+            - C2CMessage: 单聊消息
+            - DirectMessage: 频道私信消息
+
+    Raises:
+        WaitTimeoutError: 等待超时
+        WaitError: 等待任务被意外删除
+    """
+```
+
+**重要提示：** 这是一个异步方法，必须使用 `await` 调用。
+
 ### 基本用法
 
 ```python

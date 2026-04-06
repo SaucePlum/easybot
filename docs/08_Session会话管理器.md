@@ -353,7 +353,15 @@ session.remove(scope=Scope.USER, identify="user_123", key="my_session")
 等待指定的命令被触发。这是一个**异步方法**，会阻塞直到命令被触发或超时。
 
 ```python
-result_msg: Model = await session.wait_for(
+from typing import Union
+from re import Pattern
+
+result_msg: Union[
+    Model.GuildMessage,
+    Model.GroupMessage,
+    Model.C2CMessage,
+    Model.DirectMessage
+] = await session.wait_for(
     scopes=Scope.USER,              # 单个作用域或作用域列表
     command=["确认", "取消"],       # 简化用法：字符串/列表/正则
     timeout=60,                     # 超时时间(秒)，None 为永远等待
@@ -366,13 +374,13 @@ result_msg: Model = await session.wait_for(
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `scopes` | `str \| Iterable[str]` | ✅ | 作用域或作用域列表（如 `[Scope.USER, Scope.GROUP]`） |
-| `command` | `Any` | ❌ | 要等待的命令对象，多种输入格式详见下文 |
+| `scopes` | `str \| Sequence[str]` | ✅ | 作用域或作用域列表（如 `[Scope.USER, Scope.GROUP]`） |
+| `command` | `str \| Sequence[str] \| Pattern[str] \| None` | ❌ | 要等待的命令对象，多种输入格式详见下文 |
 | `timeout` | `int \| None` | ❌ | 超时时间（秒），None 表示永远等待 |
 | `predicate` | `Callable[[Any], bool] \| None` | ❌ | 自定义谓词函数，用于判断消息是否匹配 |
 | `on_timeout` | `Callable[[], Any] \| None` | ❌ | 超时回调函数，在等待超时时调用 |
 
-**返回值**: `Model` — 触发该命令时收到的消息对象
+**返回值**: `Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]` — 触发该命令时收到的消息对象，具体类型取决于消息来源场景
 
 **异常**:
 - `WaitTimeoutError` — 等待超时时抛出
