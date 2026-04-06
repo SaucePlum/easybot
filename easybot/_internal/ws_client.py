@@ -383,7 +383,6 @@ class WebSocketClient(BaseWebSocketClient):
             self._logger.debug(
                 f"READY 事件: version={data.get('version')}, shard={data.get('shard')}"
             )
-            self._logger.info("【认证阶段】完成")
             await self._bot._trigger_startup()
             return
 

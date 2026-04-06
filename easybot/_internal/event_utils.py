@@ -47,13 +47,24 @@ def check_sandbox(
 
     if event_type in C2C_EVENTS:
         author = data.get("author", {})
-        user_openid = author.get("user_openid") or author.get("member_openid")
+        user_openid = (
+            author.get("user_openid")
+            or author.get("member_openid")
+            or author.get("union_openid")
+            or author.get("union_user_account")
+        )
         if user_openid:
             return sandbox.check_user(user_openid, is_sandbox_mode, is_qq=True)
 
     if event_type in DIRECT_MESSAGE_EVENTS:
         author = data.get("author", {})
-        user_id = author.get("id")
+        user_id = (
+            author.get("id")
+            or author.get("user_openid")
+            or author.get("member_openid")
+            or author.get("union_openid")
+            or author.get("union_user_account")
+        )
         if user_id:
             return sandbox.check_user(user_id, is_sandbox_mode, is_qq=False)
 

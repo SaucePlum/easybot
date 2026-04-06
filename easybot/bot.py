@@ -175,9 +175,6 @@ class Bot:
                 f"计算后的 Intent 值: {self._intents} (0x{self._intents:X})"
             )
 
-        self.logger.info("【初始化阶段】完成")
-        self.logger.info("【连接阶段】开始")
-
         # 启动会话管理器
         self._session_manager.start(asyncio.get_event_loop())
 
@@ -1048,7 +1045,11 @@ class Bot:
                 spec = importlib.util.spec_from_file_location(module_name, plugin_file)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
+                    Plugins._current_loading_module = module_name
+                    try:
+                        spec.loader.exec_module(module)
+                    finally:
+                        Plugins._current_loading_module = None
             except Exception as e:
                 self.logger.error(f"预加载插件 {plugin_file.name} 时出错: {e}")
 
@@ -1097,7 +1098,11 @@ class Bot:
                     )
 
                     module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
+                    Plugins._current_loading_module = module_name
+                    try:
+                        spec.loader.exec_module(module)
+                    finally:
+                        Plugins._current_loading_module = None
 
                     commands_after = len(Plugins._commands)
                     preprocessors_after = sum(
@@ -1110,7 +1115,11 @@ class Bot:
                     if hasattr(module, "register"):
                         register_func = getattr(module, "register")
                         if callable(register_func):
-                            register_func(self)
+                            Plugins._current_loading_module = module_name
+                            try:
+                                register_func(self)
+                            finally:
+                                Plugins._current_loading_module = None
                             loaded_count += 1
                             self.logger.info(
                                 f"成功加载插件 (register): {plugin_file.name}"
@@ -1160,6 +1169,213 @@ class Bot:
                 f"插件注册完成：{command_count} 个指令，{preprocessor_count} 个预处理器"
             )
 
+    def reload_plugin(self, plugin_name_or_command: str) -> dict:
+        """
+        热重载指定插件
+
+        自动识别参数类型：
+        - 先尝试作为插件文件名
+        - 找不到则尝试作为命令名
+
+        Args:
+            plugin_name_or_command: 插件名或命令名
+
+        Returns:
+            重载结果信息
+        """
+        result = Plugins.reload_plugin(plugin_name_or_command)
+
+        if result["success"]:
+            self.logger.info(
+                f"插件 {result['module']} 热重载成功: "
+                f"卸载 {result['unloaded']['commands']} 命令, "
+                f"加载 {result['loaded']['commands']} 命令"
+            )
+        else:
+            self.logger.error(f"热重载失败: {result['error']}")
+
+        return result
+
+    def reload_all_plugins(self) -> list[dict]:
+        """
+        热重载所有插件
+
+        Returns:
+            所有插件的重载结果列表
+        """
+        results = []
+        plugins_path = Path(self.plugins_dir)
+
+        if not plugins_path.exists():
+            self.logger.warning(f"插件目录不存在: {plugins_path}")
+            return results
+
+        pattern = "**/*.py" if self.plugins_recursive else "*.py"
+        plugin_files = list(plugins_path.glob(pattern))
+
+        for plugin_file in plugin_files:
+            if plugin_file.name.startswith("_") or plugin_file.name == "__init__.py":
+                continue
+
+            result = Plugins._reload_module(plugin_file)
+            results.append(result)
+
+            if result["success"]:
+                self.logger.info(f"插件 {result['module']} 热重载成功")
+            else:
+                self.logger.error(
+                    f"插件 {result['module']} 热重载失败: {result['error']}"
+                )
+
+        return results
+
+    def unload_plugin(self, plugin_name: str) -> dict[str, int]:
+        """
+        卸载指定插件
+
+        Args:
+            plugin_name: 插件模块名（不含 .py 后缀）
+
+        Returns:
+            卸载的命令和预处理器数量
+        """
+        result = Plugins.unload_plugin(plugin_name)
+        self.logger.info(
+            f"插件 {plugin_name} 已卸载: "
+            f"{result['commands']} 命令, {result['preprocessors']} 预处理器"
+        )
+        return result
+
+    def get_loaded_plugins(self) -> list[str]:
+        """
+        获取所有已加载的插件模块名
+
+        Returns:
+            插件模块名列表
+        """
+        return Plugins.get_loaded_plugins()
+
+    def get_all_commands(self) -> list:
+        """
+        获取所有已注册的命令对象（包括禁用的）
+
+        Returns:
+            命令对象列表
+        """
+        return Plugins.get_all_commands()
+
+    def find_command(self, func_name: str):
+        """
+        根据函数名查找命令对象
+
+        Args:
+            func_name: 命令函数的名称
+
+        Returns:
+            命令对象，未找到返回 None
+        """
+        return Plugins.find_command(func_name)
+
+    def enable_command(self, func_name: str) -> bool:
+        """
+        启用指定的命令
+
+        Args:
+            func_name: 命令函数的名称
+
+        Returns:
+            是否成功启用
+        """
+        result = Plugins.enable_command(func_name)
+        if result:
+            self.logger.info(f"命令 {func_name} 已启用")
+        else:
+            self.logger.warning(f"启用命令 {func_name} 失败：命令不存在")
+        return result
+
+    def disable_command(self, func_name: str) -> bool:
+        """
+        禁用指定的命令
+
+        Args:
+            func_name: 命令函数的名称
+
+        Returns:
+            是否成功禁用
+        """
+        result = Plugins.disable_command(func_name)
+        if result:
+            self.logger.info(f"命令 {func_name} 已禁用")
+        else:
+            self.logger.warning(f"禁用命令 {func_name} 失败：命令不存在")
+        return result
+
+    def is_command_enabled(self, func_name: str) -> bool | None:
+        """
+        检查指定的命令是否启用
+
+        Args:
+            func_name: 命令函数的名称
+
+        Returns:
+            是否启用，未找到返回 None
+        """
+        return Plugins.is_command_enabled(func_name)
+
+    def remove_command(self, func_name: str) -> bool:
+        """
+        移除指定的命令
+
+        Args:
+            func_name: 命令函数的名称
+
+        Returns:
+            是否成功移除
+        """
+        result = Plugins.remove_command(func_name)
+        if result:
+            self.logger.info(f"命令 {func_name} 已移除")
+        else:
+            self.logger.warning(f"移除命令 {func_name} 失败：命令不存在")
+        return result
+
+    def get_plugin_commands(self, plugin_name: str) -> list[str]:
+        """
+        获取指定插件注册的所有命令函数名
+
+        Args:
+            plugin_name: 插件模块名
+
+        Returns:
+            命令函数名列表
+        """
+        return Plugins.get_plugin_commands(plugin_name)
+
+    def get_plugin_preprocessors(self, plugin_name: str) -> list[str]:
+        """
+        获取指定插件注册的所有预处理器函数名
+
+        Args:
+            plugin_name: 插件模块名
+
+        Returns:
+            预处理器函数名列表
+        """
+        return Plugins.get_plugin_preprocessors(plugin_name)
+
+    def clear_all_plugins(self) -> dict[str, int]:
+        """
+        清空所有已注册的命令和预处理器
+
+        Returns:
+            清空的命令和预处理器数量
+        """
+        result = Plugins.clear_all_plugins()
+        self.logger.info(
+            f"已清空所有插件: {result['commands']} 命令, {result['preprocessors']} 预处理器"
+        )
+        return result
+
     def _register_plugin_intents(self) -> None:
         for cmd in Plugins._commands:
             self._update_intents_for_scenes(cmd.valid_scenes)
@@ -1170,15 +1386,10 @@ class Bot:
 
         由协议客户端在成功连接后调用。
         """
-        self.logger.info("【加载阶段】开始")
-        # 插件已经在初始化阶段预加载，这里只需要记录插件注册信息
         self._log_registered_plugins()
         await self._initialize_bot_info()
-        self.logger.info("【加载阶段】完成")
-        self.logger.info("【就绪阶段】开始")
         await self._lifecycle.trigger_startup()
         self._lifecycle.start_timer()
-        self.logger.info("【就绪阶段】完成")
         self.logger.info("机器人已成功启动，进入运行状态")
 
     async def _initialize_bot_info(self) -> None:

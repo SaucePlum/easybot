@@ -214,12 +214,18 @@ class EventDispatcher:
         return 0
 
     async def _process_commands(self, scene_bit: int, model: Any) -> bool:
-        """处理命令匹配和执行
+        """
+        处理命令匹配和执行
+
+        使用最长匹配优先策略：
+        1. 收集所有能匹配的命令及其匹配长度
+        2. 按匹配长度降序排序，选择最长的匹配
+        3. 执行最佳匹配并处理短路
 
         Returns:
             bool: 如果匹配到 wait_for 命令并且短路，返回 True，否则返回 False
         """
-        # 1. 检查 WaitFor 命令
+        # 1. 检查 WaitFor 命令（保持原有逻辑）
         wait_for_commands = self._bot.session.wait_for_message_checker(model)
 
         sorted_wait_for = sorted(
@@ -234,7 +240,6 @@ class EventDispatcher:
                 if not self._check_message_contains_at(model):
                     continue
 
-            # 先检查谓词函数（如果存在）
             if x.predicate is not None:
                 try:
                     if not x.predicate(model):
@@ -243,10 +248,8 @@ class EventDispatcher:
                     self._logger.exception(f"wait_for 谓词函数执行错误: {e}")
                     continue
 
-            # 再检查命令匹配（如果没有谓词函数或者谓词函数匹配）
             match_result = self._match_command(x.command, model)
 
-            # 如果没有命令也没有谓词，或者匹配成功
             if (x.command.command is None and x.command.regex is None) or (
                 match_result is not None
             ):
@@ -255,74 +258,98 @@ class EventDispatcher:
                     return True
                 break
 
-        # 2. 按命令长度优先排序，长命令先匹配
+        # 2. 处理普通命令 - 使用最长匹配优先策略
         valid_commands = [
             cmd
             for cmd in Plugins._commands
             if cmd.enabled and (cmd.valid_scenes & scene_bit)
         ]
-        sorted_commands = sorted(
-            valid_commands, key=self._get_max_command_length, reverse=True
-        )
 
-        # 3. 处理普通命令
-        for cmd in sorted_commands:
+        # 收集所有能匹配的命令及其匹配信息
+        candidates: list[tuple[Any, str, int]] = []
+        for cmd in valid_commands:
             if cmd.at:
                 if not self._check_message_contains_at(model):
                     continue
 
-            if cmd.admin:
-                if not self._check_user_admin(model):
-                    if cmd.admin_error_msg:
-                        await self._reply_error(model, cmd.admin_error_msg)
-                    continue
-
-            if cmd.is_require_bot_admin:
-                user_id = self._get_user_id(model)
-                if user_id and not self._bot.bot_admin_manager.is_admin(user_id):
-                    if cmd.bot_admin_error_msg:
-                        await self._reply_error(model, cmd.bot_admin_error_msg)
-                    continue
-
             match_result = self._match_command(cmd, model)
             if match_result is not None:
-                try:
-                    should_short_circuit = False
+                matched_cmd, match_length = match_result
+                candidates.append((cmd, matched_cmd, match_length))
 
-                    if asyncio.iscoroutinefunction(cmd.func):
-                        if cmd.is_custom_short_circuit:
-                            result = await self._execute_command_with_result(cmd, model)
-                            should_short_circuit = bool(result)
-                        else:
-                            asyncio.create_task(self._execute_command(cmd, model))
-                            should_short_circuit = cmd.short_circuit
-                    else:
-                        result = cmd.func(model)
-                        if cmd.is_custom_short_circuit:
-                            should_short_circuit = bool(result)
-                        else:
-                            should_short_circuit = cmd.short_circuit
+        # 没有匹配的命令
+        if not candidates:
+            return False
 
-                    if should_short_circuit:
-                        return True
-                except Exception as e:
-                    self._logger.exception(f"命令执行错误: {e}")
+        # 按匹配长度降序排序（最长匹配优先），长度相同则保持原始顺序
+        candidates.sort(key=lambda x: x[2], reverse=True)
 
-        return False
+        # 当存在多个候选时输出调试日志
+        if len(candidates) > 1:
+            raw_content = getattr(model, "content", "")[:50]
+            self._logger.debug(
+                f"检测到多个命令匹配 [{raw_content}...]："
+                f"{[(c[1], c[2]) for c in candidates]}，"
+                f"选择最长匹配: {candidates[0][1]}"
+            )
 
-    async def _execute_command(self, cmd: Any, model: Any) -> None:
-        """异步执行命令回调"""
+        # 只执行最佳匹配（第一个，即最长的）
+        best_cmd, best_matched, _ = candidates[0]
+
+        # 权限检查
+        if best_cmd.admin:
+            if not self._check_user_admin(model):
+                if best_cmd.admin_error_msg:
+                    await self._reply_error(model, best_cmd.admin_error_msg)
+                if best_cmd.short_circuit:
+                    return True
+                return False
+
+        if best_cmd.is_require_bot_admin:
+            user_id = self._get_user_id(model)
+            if user_id and not self._bot.bot_admin_manager.is_admin(user_id):
+                if best_cmd.bot_admin_error_msg:
+                    await self._reply_error(model, best_cmd.bot_admin_error_msg)
+                if best_cmd.short_circuit:
+                    return True
+                return False
+
+        # 执行命令
         try:
-            sig = inspect.signature(cmd.func)
-            if "session" in sig.parameters:
-                await cmd.func(model, session=self._bot.session)
+            should_short_circuit = False
+
+            if asyncio.iscoroutinefunction(best_cmd.func):
+                if best_cmd.is_custom_short_circuit:
+                    result = await self._execute_command(best_cmd, model)
+                    should_short_circuit = bool(result)
+                else:
+                    asyncio.create_task(self._execute_command(best_cmd, model))
+                    should_short_circuit = best_cmd.short_circuit
             else:
-                await cmd.func(model)
+                result = best_cmd.func(model)
+                if best_cmd.is_custom_short_circuit:
+                    should_short_circuit = bool(result)
+                else:
+                    should_short_circuit = best_cmd.short_circuit
+
+            if should_short_circuit:
+                return True
         except Exception as e:
             self._logger.exception(f"命令执行错误: {e}")
 
-    async def _execute_command_with_result(self, cmd: Any, model: Any) -> Any:
-        """异步执行命令回调并返回结果"""
+        return False
+
+    async def _execute_command(self, cmd: Any, model: Any) -> Any:
+        """
+        异步执行命令回调
+
+        Args:
+            cmd: 命令对象
+            model: 消息模型
+
+        Returns:
+            命令执行的返回值，异常时返回 None
+        """
         try:
             sig = inspect.signature(cmd.func)
             if "session" in sig.parameters:
@@ -359,6 +386,8 @@ class EventDispatcher:
                 getattr(author, "id", None)
                 or getattr(author, "user_openid", None)
                 or getattr(author, "member_openid", None)
+                or getattr(author, "union_openid", None)
+                or getattr(author, "union_user_account", None)
             )
         return None
 
@@ -371,8 +400,13 @@ class EventDispatcher:
             except Exception as e:
                 self._logger.error(f"回复错误消息失败: {e}")
 
-    def _match_command(self, cmd: Any, model: Any) -> Any:
-        """匹配命令"""
+    def _match_command(self, cmd: Any, model: Any) -> tuple[str, int] | None:
+        """
+        匹配命令，返回 (匹配的命令字符串, 匹配长度) 或 None
+
+        使用最长匹配优先策略：返回实际匹配到的命令及其长度，
+        供调用方选择最优匹配。
+        """
         raw_content = getattr(model, "content", "")
 
         if cmd.command:
@@ -388,12 +422,12 @@ class EventDispatcher:
                                 ].strip()
                                 if model._raw_data is not None:
                                     model._raw_data["treated_msg"] = model.treated_msg
-                        return True
+                        return (command, len(command))
                 else:
                     treated_msg = getattr(model, "treated_msg", raw_content)
                     msg = treated_msg if cmd.treat else raw_content
                     if msg.strip().startswith(command):
-                        return True
+                        return (command, len(command))
         elif cmd.regex:
             treated_msg = getattr(model, "treated_msg", raw_content)
             msg = treated_msg if cmd.treat else raw_content
@@ -406,7 +440,8 @@ class EventDispatcher:
                         model.treated_msg = match.groups()
                         if model._raw_data is not None:
                             model._raw_data["treated_msg"] = model.treated_msg
-                    return True
+                    matched_str = match.group(0)
+                    return (regex.pattern, len(matched_str))
 
         return None
 
