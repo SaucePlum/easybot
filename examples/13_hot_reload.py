@@ -119,7 +119,9 @@ def main():
         arg = msg.treated_msg.strip() if msg.treated_msg else ""
 
         if not arg:
-            await msg.reply("用法: /启用 <函数名或命令名>\n示例: /启用 ping_cmd\n示例: /启用 /ping")
+            await msg.reply(
+                "用法: /启用 <函数名或命令名>\n示例: /启用 ping_cmd\n示例: /启用 /ping"
+            )
             return
 
         if bot.enable_command(arg):
@@ -137,7 +139,9 @@ def main():
         arg = msg.treated_msg.strip() if msg.treated_msg else ""
 
         if not arg:
-            await msg.reply("用法: /禁用 <函数名或命令名>\n示例: /禁用 ping_cmd\n示例: /禁用 /ping")
+            await msg.reply(
+                "用法: /禁用 <函数名或命令名>\n示例: /禁用 ping_cmd\n示例: /禁用 /ping"
+            )
             return
 
         if bot.disable_command(arg):
