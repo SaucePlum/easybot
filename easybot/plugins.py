@@ -5,6 +5,7 @@ EasyBot SDK 插件系统模块
 提供预处理器、命令插件系统和权限管理功能。
 """
 
+import asyncio
 import importlib
 import inspect
 import os
@@ -51,15 +52,18 @@ class BotAdminManager:
 
     使用单例模式确保所有实例共享同一份数据。
 
+    注意：所有修改操作都是异步方法，需要在异步上下文中调用。
+
     使用示例:
         admin_manager = BotAdminManager()
+        await admin_manager.initialize()
 
         # 批量设置管理员列表（合并式，会持久化）
-        admin_manager.bot_admins = ["user_id_1", "user_id_2"]
+        await admin_manager.set_bot_admins(["user_id_1", "user_id_2"])
 
         # 增量添加/移除
-        admin_manager.add_admin("user_id_3")
-        admin_manager.remove_admin("user_id_1")
+        await admin_manager.add_admin("user_id_3")
+        await admin_manager.remove_admin("user_id_1")
 
         if admin_manager.is_admin("user_id_1"):
             print("是机器人管理员")
@@ -83,51 +87,70 @@ class BotAdminManager:
         self._data_dir = data_dir or os.path.join(os.getcwd(), self._DEFAULT_DATA_DIR)
         self._file_path = Path(self._data_dir) / self._DEFAULT_FILE_NAME
         self._admins: Set[str] = set()
-        self._load()
+        self._data_loaded = False
         self._initialized = True
+
+    async def initialize(self) -> None:
+        """
+        异步初始化，加载持久化的管理员数据
+
+        应在事件循环启动后调用，通常由 Bot 启动时自动调用。
+        """
+        if not self._data_loaded:
+            await self._load()
+            self._data_loaded = True
 
     @property
     def bot_admins(self) -> list[str]:
-        """获取当前管理员列表"""
+        """获取当前管理员列表（只读）"""
         return list(self._admins)
 
-    @bot_admins.setter
-    def bot_admins(self, value: Iterable[str]) -> None:
-        """设置管理员列表（合并式，与现有数据取并集，不会丢失已有管理员）"""
+    async def set_bot_admins(self, value: Iterable[str]) -> None:
+        """
+        设置管理员列表（合并式，与现有数据取并集，不会丢失已有管理员）
+
+        Args:
+            value: 管理员ID列表
+        """
         for user_id in value:
             if not isinstance(user_id, str):
                 raise TypeError(f"user_id 必须是字符串类型，实际为 {type(user_id)}")
             self._admins.add(user_id)
-        self._save()
+        await self._save()
 
-    def add_admin(self, *user_ids: str) -> None:
+    async def add_admin(self, *user_ids: str) -> None:
         """
         添加机器人管理员
 
-        :param user_ids: 用户ID，可传入多个
+        Args:
+            user_ids: 用户ID，可传入多个
         """
         for user_id in user_ids:
             if not isinstance(user_id, str):
                 raise TypeError(f"user_id 必须是字符串类型，实际为 {type(user_id)}")
             self._admins.add(user_id)
-        self._save()
+        await self._save()
 
-    def remove_admin(self, *user_ids: str) -> None:
+    async def remove_admin(self, *user_ids: str) -> None:
         """
         移除机器人管理员
 
-        :param user_ids: 用户ID，可传入多个
+        Args:
+            user_ids: 用户ID，可传入多个
         """
         for user_id in user_ids:
             self._admins.discard(user_id)
-        self._save()
+        await self._save()
 
     def is_admin(self, user_id: str) -> bool:
         """
         检查用户是否为机器人管理员
 
-        :param user_id: 用户ID
-        :return: 是否为机器人管理员
+        Args:
+            user_id: 用户ID
+
+        Returns:
+            是否为机器人管理员
         """
         return user_id in self._admins
 
@@ -135,22 +158,28 @@ class BotAdminManager:
         """
         获取所有机器人管理员
 
-        :return: 机器人管理员ID集合的副本
+        Returns:
+            机器人管理员ID集合的副本
         """
         return self._admins.copy()
 
-    def clear_admins(self) -> None:
+    async def clear_admins(self) -> None:
         """
         清空所有机器人管理员
         """
         self._admins.clear()
-        self._save()
+        await self._save()
 
-    def _load(self) -> None:
-        """从 YAML 文件加载管理员数据"""
+    async def _load(self) -> None:
+        """从 YAML 文件加载管理员数据（异步）"""
         try:
             if self._file_path.exists():
-                data = yaml.safe_load(self._file_path.read_text(encoding="utf-8"))
+
+                def _sync_read():
+                    return self._file_path.read_text(encoding="utf-8")
+
+                content = await asyncio.to_thread(_sync_read)
+                data = yaml.safe_load(content)
                 if isinstance(data, dict) and "admins" in data:
                     admins = data["admins"]
                     if isinstance(admins, list):
@@ -158,18 +187,22 @@ class BotAdminManager:
         except Exception:
             pass
 
-    def _save(self) -> None:
-        """将管理员数据持久化到 YAML 文件"""
+    async def _save(self) -> None:
+        """将管理员数据持久化到 YAML 文件（异步）"""
         try:
             self._file_path.parent.mkdir(parents=True, exist_ok=True)
-            self._file_path.write_text(
-                yaml.dump(
-                    {"admins": list(self._admins)},
-                    allow_unicode=True,
-                    default_flow_style=False,
-                ),
-                encoding="utf-8",
-            )
+
+            def _sync_write():
+                self._file_path.write_text(
+                    yaml.dump(
+                        {"admins": list(self._admins)},
+                        allow_unicode=True,
+                        default_flow_style=False,
+                    ),
+                    encoding="utf-8",
+                )
+
+            await asyncio.to_thread(_sync_write)
         except Exception:
             pass
 

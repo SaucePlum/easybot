@@ -34,30 +34,22 @@ def main() -> None:
 
         if msg.treated_msg == "发送消息":
             # 发送频道消息
-            result = await bot.api.send_guild_message(
-                channel_id=msg.channel_id,
-                content="Hello from API!",
-                msg_id=msg.id,  # 被动消息，回复原消息
-            )
+            result = await msg.reply("Hello from API!")
             bot.logger.info(f"消息发送成功，ID: {result.id}")
 
         # ----- 发送带图片的消息（仅频道支持 image/file_image） -----
         elif msg.treated_msg == "发送图片":
-            result = await bot.api.send_guild_message(
-                channel_id=msg.channel_id,
-                content="看这张图",
-                file_image="./images/photo.png",  # 仅频道支持
-                msg_id=msg.id,
+            result = await msg.reply(
+                MessagesModel.Message(
+                    content="看这张图",
+                    file_image="./images/photo.png",
+                )
             )
             bot.logger.info(f"图片消息发送成功，ID: {result.id}")
 
         elif msg.treated_msg == "发送markdown":
             # 发送 Markdown 消息
-            await bot.api.send_guild_message(
-                channel_id=msg.channel_id,
-                content=MessagesModel.MessageMarkdown(content="# API 发送的 Markdown"),
-                msg_id=msg.id,
-            )
+            await msg.reply(MessagesModel.MessageMarkdown(content="# API 发送的 Markdown"))
 
         elif msg.treated_msg == "获取消息":
             # 获取指定消息
@@ -88,9 +80,7 @@ def main() -> None:
 
         if msg.treated_msg == "发送群消息":
             # 发送群聊消息
-            await bot.api.send_group_message(
-                group_openid=msg.group_openid, content="Hello Group!", msg_id=msg.id
-            )
+            await msg.reply("Hello Group!")
 
         # ----- 群聊发送图片（必须使用 upload_media） -----
         elif msg.treated_msg == "发送图片":
@@ -103,12 +93,11 @@ def main() -> None:
                 )
 
                 # 步骤2：发送引用图片的消息
-                await bot.api.send_group_message(
-                    group_openid=msg.group_openid,
-                    content=MessagesModel.Message(
-                        content="群聊图片", media_file_info=upload_result.file_info
-                    ),
-                    msg_id=msg.id,
+                await msg.reply(
+                    MessagesModel.Message(
+                        content="群聊图片",
+                        media_file_info=upload_result.file_info,
+                    )
                 )
             except Exception as e:
                 bot.logger.error(f"发送图片失败: {e}")
@@ -116,12 +105,8 @@ def main() -> None:
 
         elif msg.treated_msg == "发送embed":
             # 发送 Embed 消息
-            await bot.api.send_group_message(
-                group_openid=msg.group_openid,
-                content=MessagesModel.MessageEmbed(
-                    title="群公告", content=["公告内容1", "公告内容2"]
-                ),
-                msg_id=msg.id,
+            await msg.reply(
+                MessagesModel.MessageEmbed(title="群公告", content=["公告内容1", "公告内容2"])
             )
 
     # ==================== 10.3 单聊相关 API ====================
@@ -131,9 +116,7 @@ def main() -> None:
 
         if msg.treated_msg == "发送私信":
             # 发送单聊消息
-            await bot.api.send_c2c_message(
-                openid=msg.author.user_openid, content="Hello!", msg_id=msg.id
-            )
+            await msg.reply("Hello!")
 
         # ----- 单聊发送图片（必须使用 upload_media） -----
         elif msg.treated_msg == "发送图片":
@@ -146,12 +129,11 @@ def main() -> None:
                 )
 
                 # 步骤2：发送引用图片的消息
-                await bot.api.send_c2c_message(
-                    openid=msg.author.user_openid,
-                    content=MessagesModel.Message(
-                        content="私信图片", media_file_info=upload_result.file_info
-                    ),
-                    msg_id=msg.id,
+                await msg.reply(
+                    MessagesModel.Message(
+                        content="私信图片",
+                        media_file_info=upload_result.file_info,
+                    )
                 )
             except Exception as e:
                 bot.logger.error(f"发送图片失败: {e}")
@@ -243,7 +225,7 @@ def main() -> None:
 
     # ==================== 10.7 互动事件处理 ====================
     @bot.on_interaction
-    async def handle_interaction(msg) -> None:
+    async def handle_interaction(msg: Model.Interaction) -> None:
         """互动按钮点击事件处理"""
         bot.logger.info(f"收到互动事件: {msg.data}")
 

@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://sauceplum.github.io/easybot/sitemap.xml

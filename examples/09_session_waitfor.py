@@ -16,6 +16,7 @@ from re import compile as re_compile
 
 from easybot import (
     Bot,
+    BoundSession,
     CommandValidScenes,
     Model,
     Scope,
@@ -32,15 +33,19 @@ def main() -> None:
     )
 
     # ==================== 9.1 基础 session 使用 ====================
-    @bot.on_command(command="注册")
+    @bot.on_command(
+        command="注册",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_register(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
     ) -> None:
         """简单的注册流程示例"""
         with bot.session.bind(msg) as s:
-            # 创建会话，设置60秒超时
-            s.new(
-                scope=Scope.USER,  # 用户级别
+            await s.new(
+                scope=Scope.USER,
                 key="register_flow",
                 data={"step": 1, "name": None, "age": None},
                 timeout=60,
@@ -48,13 +53,18 @@ def main() -> None:
             )
             await msg.reply("📝 注册流程开始\n请输入你的名字：")
 
-    @bot.on_command(command="查看注册")
+    @bot.on_command(
+        command="查看注册",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_check_register(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
     ) -> None:
         """查看当前注册状态"""
         with bot.session.bind(msg) as s:
-            session = s.get(Scope.USER, "register_flow")
+            session = await s.get(Scope.USER, "register_flow")
             if session:
                 await msg.reply(
                     f"📋 注册进度：\n"
@@ -66,29 +76,40 @@ def main() -> None:
                 await msg.reply("❌ 你没有进行中的注册流程")
 
     # ==================== 9.2 使用 with_session 装饰器简化 ====================
-    @bot.on_command(command="游戏")
+    @bot.on_command(
+        command="游戏",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     @with_session
     async def cmd_game(
-        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage, session=None
+        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
+        session: BoundSession,
     ) -> None:
         """使用装饰器自动注入 session"""
-        # 创建游戏会话
-        session.new(
+        await session.new(
             scope=Scope.USER,
             key="game_session",
             data={"score": 0, "level": 1, "lives": 3},
-            timeout=300,  # 5分钟超时
+            timeout=300,
             timeout_reply="⏰ 游戏已超时结束",
         )
         await msg.reply("🎮 游戏开始！\n当前等级：1\n生命值：3")
 
-    @bot.on_command(command="查看游戏")
+    @bot.on_command(
+        command="查看游戏",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     @with_session
     async def cmd_check_game(
-        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage, session=None
+        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
+        session: BoundSession,
     ) -> None:
         """查看游戏状态"""
-        game = session.get(Scope.USER, "game_session")
+        game = await session.get(Scope.USER, "game_session")
         if game:
             data = game.data
             await msg.reply(
@@ -101,7 +122,12 @@ def main() -> None:
             await msg.reply("❌ 没有进行中的游戏")
 
     # ==================== 9.3 wait_for 等待用户输入 ====================
-    @bot.on_command(command="确认")
+    @bot.on_command(
+        command="确认",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_confirm(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
     ) -> None:
@@ -127,7 +153,12 @@ def main() -> None:
             except WaitError as e:
                 await msg.reply(f"❌ 发生错误：{e}")
 
-    @bot.on_command(command="选择")
+    @bot.on_command(
+        command="选择",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_choose(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
     ) -> None:
@@ -150,7 +181,12 @@ def main() -> None:
                 await msg.reply("⏰ 选择超时")
 
     # ==================== 9.4 复杂的多步骤流程 ====================
-    @bot.on_command(command="问卷调查")
+    @bot.on_command(
+        command="问卷调查",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_survey(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
     ) -> None:
@@ -191,8 +227,7 @@ def main() -> None:
                 )
                 hobbies = hobby_msg.content
 
-                # 保存调查数据到 session
-                s.new(
+                await s.new(
                     scope=Scope.USER,
                     key="survey_data",
                     data={
@@ -201,7 +236,7 @@ def main() -> None:
                         "hobbies": hobbies,
                         "completed": True,
                     },
-                    timeout=3600,  # 1小时过期
+                    timeout=3600,
                 )
 
                 await msg.reply(
@@ -215,13 +250,18 @@ def main() -> None:
             except WaitTimeoutError:
                 await msg.reply("⏰ 调查超时，请重新开始")
 
-    @bot.on_command(command="查看调查")
+    @bot.on_command(
+        command="查看调查",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_check_survey(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
     ) -> None:
         """查看调查结果"""
         with bot.session.bind(msg) as s:
-            survey = s.get(Scope.USER, "survey_data")
+            survey = await s.get(Scope.USER, "survey_data")
             if survey and survey.data.get("completed"):
                 data = survey.data
                 await msg.reply(
@@ -233,13 +273,11 @@ def main() -> None:
             else:
                 await msg.reply("❌ 你还没有完成调查")
 
-    # ==================== 9.5 不同作用域的 session ====================
     @bot.on_command(command="群设置")
     async def cmd_group_settings(msg: Model.GroupMessage) -> None:
         """群聊级别的设置"""
         with bot.session.bind(msg) as s:
-            # Scope.GROUP 表示这个设置是整个群聊共享的
-            s.new(
+            await s.new(
                 scope=Scope.GROUP,
                 key="group_config",
                 data={
@@ -254,7 +292,7 @@ def main() -> None:
     async def cmd_check_group_settings(msg: Model.GroupMessage) -> None:
         """查看群聊设置"""
         with bot.session.bind(msg) as s:
-            config = s.get(Scope.GROUP, "group_config")
+            config = await s.get(Scope.GROUP, "group_config")
             if config:
                 data = config.data
                 await msg.reply(
@@ -270,22 +308,26 @@ def main() -> None:
     async def cmd_channel_settings(msg: Model.GuildMessage) -> None:
         """频道级别的设置"""
         with bot.session.bind(msg) as s:
-            # Scope.CHANNEL 表示这个设置是当前子频道共享的
-            s.new(
+            await s.new(
                 scope=Scope.CHANNEL,
                 key="channel_config",
                 data={"slow_mode": 30, "announcement": "频道公告"},
             )
             await msg.reply("✅ 频道设置已保存（子频道级别）")
 
-    @bot.on_command(command="全局设置")
+    @bot.on_command(
+        command="全局设置",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     @with_session
     async def cmd_global_settings(
-        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage, session=None
+        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
+        session: BoundSession,
     ) -> None:
         """全局级别的设置"""
-        # Scope.GLOBAL 表示这个设置是全局共享的
-        session.new(
+        await session.new(
             scope=Scope.GLOBAL,
             key="global_config",
             data={"maintenance_mode": False, "version": "1.0.0"},

@@ -23,35 +23,6 @@ if TYPE_CHECKING:
     from ..bot import Bot
 
 
-@dataclass
-class GatewayInfo:
-    """
-    Gateway 信息数据类
-
-    存储 /gateway/bot 接口返回的完整信息。
-    """
-
-    url: str
-    shards: int
-    session_total: int
-    session_remaining: int
-    session_reset_after: int
-    max_concurrency: int
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "GatewayInfo":
-        """从 API 响应创建 GatewayInfo 实例"""
-        session_limit = data.get("session_start_limit", {})
-        return cls(
-            url=data.get("url", ""),
-            shards=data.get("shards", 1),
-            session_total=session_limit.get("total", 1000),
-            session_remaining=session_limit.get("remaining", 1000),
-            session_reset_after=session_limit.get("reset_after", 0),
-            max_concurrency=session_limit.get("max_concurrency", 1),
-        )
-
-
 class SessionLimiter:
     """
     Session 启动限制器
@@ -146,7 +117,7 @@ class WebSocketClient(BaseWebSocketClient):
 
         self._session_id: str | None = None
         self._seq: int = 0
-        self._gateway_info: GatewayInfo | None = None
+        self._gateway_info: Model.GatewayInfo | None = None
 
         self._logger.debug(
             f"WebSocketClient 初始化: shard_no={protocol.shard_no}, "
@@ -208,18 +179,18 @@ class WebSocketClient(BaseWebSocketClient):
             await cleanup_task(self._heartbeat_task, "心跳任务")
             self._heartbeat_task = None
 
-    async def _get_gateway_info(self) -> GatewayInfo:
+    async def _get_gateway_info(self) -> Model.GatewayInfo:
         """
         获取 Gateway 完整信息
 
         Returns:
-            GatewayInfo: 包含 URL、分片数、Session 限制等信息
+            Model.GatewayInfo: 包含 URL、分片数、Session 限制等信息
         """
         http_client = await self._bot.api._get_http()
 
         try:
             data = await http_client.get("/gateway/bot")
-            gateway_info = GatewayInfo.from_dict(data)
+            gateway_info = Model.GatewayInfo.from_dict(data)
 
             if not gateway_info.url:
                 raise NetworkError("获取 Gateway 地址失败")

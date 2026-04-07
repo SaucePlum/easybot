@@ -12,15 +12,10 @@ EasyBot SDK 内部模块
 from .http_client import HTTPClient
 from .intent import Intent, IntentCalculator
 from .reply_strategy import ReplyStrategy
-from .utils import format_url, safe_get, timestamp_to_datetime, validate_id
 
 __all__ = [
     "Intent",
     "IntentCalculator",
     "HTTPClient",
     "ReplyStrategy",
-    "timestamp_to_datetime",
-    "validate_id",
-    "safe_get",
-    "format_url",
 ]

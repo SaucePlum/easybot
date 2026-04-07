@@ -1,23 +1,22 @@
 """
-EasyBot 插件开发模板
-===================
+EasyBot 插件开发模板（方式一：Plugins 装饰器）
+===========================================
 这是一个插件开发模板，展示：
-- 命令注册
-- 预处理器
+- 使用 Plugins 装饰器注册命令
+- 使用 Plugins 装饰器注册预处理器
 - 权限控制
-- 插件注册函数
 """
 
-from easybot import Bot, CommandValidScenes, Model, Plugins
+from easybot import CommandValidScenes, Model, Plugins
 
 
 @Plugins.before_command(valid_scenes=CommandValidScenes.ALL)
-def preprocessor(
+async def preprocessor(
     msg: (
         Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage
     ),
 ):
-    print(f"[插件预处理] {msg.treated_msg}")
+    return True
 
 
 @Plugins.on_command(
@@ -41,8 +40,3 @@ async def plugin_command(
 )
 async def admin_command(msg: Model.GuildMessage):
     await msg.reply("管理员命令执行成功！")
-
-
-def register(bot: Bot):
-    bot.logger.info("示例插件已加载")
-    bot.bot_admin_manager.add_admin("default_admin_id")

@@ -59,15 +59,17 @@ from easybot import (
 
 1. 检查网络连接
 ```python
-# 测试网络
 import asyncio
-import aiohttp
+import urllib.request
 
 async def test_connection():
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.sgroup.qq.com") as resp:
-                print(f"连接状态: {resp.status}")
+        def _sync_check() -> int:
+            with urllib.request.urlopen("https://api.sgroup.qq.com", timeout=10) as resp:
+                return resp.status
+
+        status = await asyncio.to_thread(_sync_check)
+        print(f"连接状态: {status}")
     except Exception as e:
         print(f"连接失败: {e}")
 
@@ -228,13 +230,15 @@ await bot.api.send_c2c_message(
 **解决方案：**
 
 ```python
+from easybot import Model
+
 # 监听审核事件
 @bot.on_message_audit_reject
-async def on_audit_reject(event):
+async def on_audit_reject(event: Model.MessageAudited) -> None:
     bot.logger.warning(f"消息被拒绝: {event}")
 
 @bot.on_message_audit_pass
-async def on_audit_pass(event):
+async def on_audit_pass(event: Model.MessageAudited) -> None:
     bot.logger.info(f"消息审核通过: {event}")
 ```
 
@@ -253,7 +257,7 @@ async def on_audit_pass(event):
 1. 检查机器人权限
 ```python
 # 获取机器人权限
-permissions = await bot.api.get_guild_api_permissions(guild_id)
+permissions = await bot.api.get_guild_api_permissions("guild_id")
 for api in permissions.apis:
     print(f"{api.path}: {api.auth_status}")
 ```
@@ -304,7 +308,9 @@ await bot.api.demand_guild_api_permission(
 )
 
 # 添加机器人管理员
-bot.bot_admin_manager.add_admin("user_id")
+@bot.on_startup
+async def init_admin(event: Model.StartupEvent) -> None:
+    await bot.bot_admin_manager.add_admin("user_id")
 ```
 
 ---
@@ -336,8 +342,10 @@ logging.getLogger("easybot").setLevel(logging.DEBUG)
 ### 打印事件数据
 
 ```python
+from easybot import Model
+
 @bot.on_all_intent_events
-async def debug_all(event):
+async def debug_all(event: Model.BaseModel) -> None:
     import json
     bot.logger.debug(f"事件数据: {json.dumps(event.to_dict(), ensure_ascii=False, indent=2)}")
 ```
@@ -387,8 +395,10 @@ bot = Bot(
 
 ```python
 # 确保注册了事件处理器
+from easybot import Model
+
 @bot.on_guild_message
-async def handle(msg):
+async def handle(msg: Model.GuildMessage) -> None:
     print(f"收到消息: {msg.treated_msg}")  # 确认能收到
 ```
 
@@ -417,7 +427,9 @@ with bot.session.bind(msg) as s:
 
 ```python
 # 手动保存会话
-bot.session.commit_data()
+@bot.on_shutdown
+async def persist_sessions(event: Model.ShutdownEvent) -> None:
+    await bot.session.commit_data()
 ```
 
 ### Q: 插件不加载？
@@ -425,7 +437,7 @@ bot.session.commit_data()
 **A:** 检查：
 1. `auto_load_plugins` 是否为 True
 2. 插件目录路径是否正确
-3. 插件文件是否包含 `register` 函数或使用了装饰器
+3. 插件文件是否使用了 `@Plugins.on_command` 或 `@Plugins.before_command` 装饰器
 
 ```python
 bot = Bot(
@@ -443,6 +455,7 @@ bot = Bot(
 ```python
 import asyncio
 from collections import deque
+from easybot import Model
 
 message_queue = deque()
 
@@ -454,7 +467,7 @@ async def process_queue():
         await asyncio.sleep(0.01)
 
 @bot.on_guild_message
-async def handle(msg):
+async def enqueue(msg: Model.GuildMessage) -> None:
     message_queue.append(msg)
 
 # 启动队列处理
@@ -466,8 +479,10 @@ asyncio.create_task(process_queue())
 **A:** 使用 `on_timer` 装饰器：
 
 ```python
+from easybot import Model
+
 @bot.on_timer(interval=60)  # 每60秒执行
-async def scheduled_task(event):
+async def scheduled_task(event: Model.TimerEvent) -> None:
     bot.logger.info(f"定时任务执行，第 {event.tick_count} 次")
 ```
 
@@ -476,8 +491,10 @@ async def scheduled_task(event):
 **A:** 使用生命周期事件：
 
 ```python
+from easybot import Model
+
 @bot.on_shutdown
-async def cleanup(event):
+async def cleanup(event: Model.ShutdownEvent) -> None:
     bot.logger.info("正在清理资源...")
     await bot.session.commit_data()  # 保存会话
     # 其他清理操作

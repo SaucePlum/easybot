@@ -75,6 +75,9 @@ class UnifiedReplyStrategy(ReplyStrategy):
     本策略按事件类型自动选择：
     - 消息类事件（有 msg_id）→ 优先使用 msg_id，兼容官方可能的消息类专属限制
     - 非消息类事件（无 msg_id）→ 使用 event_id
+
+    引用回复说明（message_reference）：
+    所有场景都使用 MessageReference 对象格式：{message_id, ignore_get_message_error}
     """
 
     def __init__(
@@ -98,7 +101,24 @@ class UnifiedReplyStrategy(ReplyStrategy):
         msg_seq=1,
         channel_id: str | None = None,
     ):
-        reply_id = self._msg_id or self._event_id
+        """
+        发送回复消息
+
+        Args:
+            content: 消息内容
+            reference: 是否引用原消息（引用回复）
+            msg_seq: 消息序号（群聊/单聊使用）
+            channel_id: 子频道 ID（仅频道场景使用，用于指定回复目标）
+
+        Returns:
+            发送结果
+
+        Note:
+            引用回复（reference=True）时：
+            - 群聊/单聊：使用布尔格式的 message_reference
+            - 频道/私信：使用对象格式的 message_reference
+        """
+        reference_id = self._msg_id if reference else None
 
         match self._scene:
             case "guild":
@@ -113,6 +133,7 @@ class UnifiedReplyStrategy(ReplyStrategy):
                     content=content,
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
+                    message_reference_id=reference_id,
                 )
 
             case "direct":
@@ -121,6 +142,7 @@ class UnifiedReplyStrategy(ReplyStrategy):
                     content=content,
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
+                    message_reference_id=reference_id,
                 )
 
             case "group":
@@ -130,6 +152,7 @@ class UnifiedReplyStrategy(ReplyStrategy):
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
                     msg_seq=msg_seq,
+                    message_reference_id=reference_id,
                 )
 
             case "c2c":
@@ -139,6 +162,7 @@ class UnifiedReplyStrategy(ReplyStrategy):
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
                     msg_seq=msg_seq,
+                    message_reference_id=reference_id,
                 )
 
             case _:

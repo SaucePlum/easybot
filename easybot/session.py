@@ -5,6 +5,7 @@ EasyBot SDK 会话管理模块
 提供会话管理和 WaitFor 命令检查功能。
 """
 
+import asyncio
 import os
 import pickle
 from asyncio import AbstractEventLoop, sleep
@@ -27,45 +28,19 @@ from typing import (
 )
 
 from .builders import MessagesModel
-from .models import C2CMessage, DirectMessage, GroupMessage, GuildMessage, Model
+from .exceptions import WaitError, WaitTimeoutError
+from .models import (
+    C2CMessage,
+    DirectMessage,
+    GroupMessage,
+    GuildMessage,
+    Model,
+    SessionStatus,
+)
 from .plugins import BotCommandObject, CommandValidScenes
 
 if TYPE_CHECKING:
     from .bot import Bot
-
-
-class SessionStatus:
-    """
-    会话状态枚举类
-
-    会话只有两种状态：活跃和非活跃。超时后会话会变为 INACTIVE，
-    然后由 GC 在指定时间后清理，这样可以给用户一个"缓冲期"来恢复会话。
-    """
-
-    ACTIVE = 0
-    INACTIVE = 1
-
-
-class WaitError(Exception):
-    """
-    等待错误
-
-    当 wait_for() 注册的等待任务被意外删除时抛出，
-    通常发生在并发场景下多个处理器竞争同一消息时。
-    """
-
-    pass
-
-
-class WaitTimeoutError(Exception):
-    """
-    等待超时错误
-
-    当 wait_for() 在指定的超时时间内未收到匹配的消息时抛出，
-    调用方可以捕获此异常来执行超时后的处理逻辑。
-    """
-
-    pass
 
 
 class WaitForCommandCallback:
@@ -134,13 +109,15 @@ class _SessionObject:
     与 SessionObject 不同，它包含了超时处理、GC 回收等实现细节。
 
     超时机制说明：
-    1. timeout: 会话超时时间（秒），从 last_operate 开始计算
+    1. timeout: 会话超时时间（秒），从 last_operate 开始计算，默认 1800 秒（30 分钟）
     2. inactive_gc_timeout: 会话变为 INACTIVE 后，等待多久才真正删除
     3. gc_timeout_stamp: 预计被 GC 清理的时间戳
 
     这样设计是为了让用户在会话刚超时时还有机会"恢复"会话，
     比如用户可能只是回复慢了一点，不应该立即删除会话数据。
     """
+
+    DEFAULT_TIMEOUT = 1800  # 默认会话超时时间：30 分钟
 
     def __init__(
         self,
@@ -166,7 +143,7 @@ class _SessionObject:
     ):
         self.status = status
         self.data = data
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else self.DEFAULT_TIMEOUT
         self.last_operate = last_operate
         self.timeout_reply = timeout_reply
         self.inactive_gc_timeout = inactive_gc_timeout
@@ -193,17 +170,19 @@ class BoundSession:
     它自动从绑定的消息对象中提取 identify（用户ID/频道ID等），
     这样用户就不需要在每次调用时手动传入 identify。
 
+    注意：所有修改操作都是异步方法，需要在异步上下文中调用。
+
     使用示例：
         with session.bind(msg) as s:
-            s.new(Scope.USER, "key", {"step": 1})  # 自动使用 msg.author.id 作为 identify
-            data = s.get(Scope.USER, "key")
+            await s.new(Scope.USER, "key", {"step": 1})
+            data = await s.get(Scope.USER, "key")
     """
 
     def __init__(self, manager: "SessionManager", obj: Any):
         self._manager: "SessionManager" = manager
         self._obj: Any = obj
 
-    def new(
+    async def new(
         self,
         scope: str,
         key: Hashable,
@@ -234,7 +213,7 @@ class BoundSession:
             data: 会话数据字典
             identify: 标识符（通常不需要传，会自动从绑定的消息对象提取）
             is_replace: 如果会话已存在是否替换，False 时会抛出 KeyError
-            timeout: 超时时间（秒），超时后会话变为 INACTIVE
+            timeout: 超时时间（秒），超时后会话变为 INACTIVE，默认 1800 秒（30 分钟）
             timeout_reply: 超时时发送的回复消息
             inactive_gc_timeout: 变为 INACTIVE 后多久被 GC 清理（秒）
             send_reply_on_msg_id_expired: 当 msg_id 过期（超过5分钟）时是否仍发送消息
@@ -244,7 +223,7 @@ class BoundSession:
         Returns:
             SessionObject: 创建的会话对象
         """
-        return self._manager._new(
+        return await self._manager._new(
             self._obj,
             scope,
             key,
@@ -257,7 +236,7 @@ class BoundSession:
             send_reply_on_msg_id_expired,
         )
 
-    def get(
+    async def get(
         self,
         scope: str,
         key: Hashable,
@@ -280,11 +259,11 @@ class BoundSession:
         Returns:
             SessionObject 或 default: 会话对象或默认值
         """
-        return self._manager._get(
+        return await self._manager._get(
             self._obj, scope, key, identify, default, skip_update_last_op
         )
 
-    def update(
+    async def update(
         self,
         scope: str,
         key: Hashable,
@@ -309,9 +288,9 @@ class BoundSession:
         Raises:
             KeyError: 会话不存在时抛出
         """
-        return self._manager._update(self._obj, scope, key, data, identify)
+        return await self._manager._update(self._obj, scope, key, data, identify)
 
-    def remove(
+    async def remove(
         self,
         scope: Optional[str] = None,
         identify: Optional[Hashable] = None,
@@ -331,7 +310,7 @@ class BoundSession:
             identify: 标识符
             key: 会话键
         """
-        return self._manager.remove(scope, identify, key)
+        return await self._manager.remove(scope, identify, key)
 
     async def wait_for(
         self,
@@ -423,36 +402,44 @@ class SessionManager:
         self.__check_path(self.__commit_path)
         self.__is_auto_commit = is_auto_commit
         self.__is_running = False
+        self.__data_loaded = False
         self.api = None
         self._current_obj = None
-        self.fetch_data()
 
     def __check_path(self, path: str):
         """检查路径是否存在，不存在则创建"""
         if not os.path.exists(path):
             os.makedirs(path)
 
-    def fetch_data(self):
+    async def fetch_data(self):
         """
-        从文件加载会话数据
+        从文件加载会话数据（异步）
 
         在初始化时自动调用，用于恢复之前的会话状态。
+        使用 asyncio.to_thread() 将同步 I/O 操作卸载到线程池。
         如果文件不存在或加载失败，会使用空的会话字典。
         加载完成后会自动清理已过期的会话。
         """
         try:
             data_path = os.path.join(self.__commit_path, "sessions.pickle")
-            if os.path.exists(data_path):
-                with open(data_path, "rb") as f:
-                    self.__sessions = pickle.load(f)
+
+            def _sync_read():
+                if os.path.exists(data_path):
+                    with open(data_path, "rb") as f:
+                        return pickle.load(f)
+                return None
+
+            data = await asyncio.to_thread(_sync_read)
+            if data is not None:
+                self.__sessions = data
                 self.__logger.debug("加载session会话数据成功")
-                self._cleanup_expired_sessions_on_startup()
+                await self._cleanup_expired_sessions_on_startup()
         except Exception as e:
             self.__logger.error(f"加载session会话数据失败: {e}")
 
-    def _cleanup_expired_sessions_on_startup(self):
+    async def _cleanup_expired_sessions_on_startup(self):
         """
-        启动时清理已过期的会话
+        启动时清理已过期的会话（异步）
 
         程序停机期间可能已有会话超时，需要在启动时清理，
         避免用户 get() 到本该过期的会话，或重复发送 timeout_reply。
@@ -486,7 +473,7 @@ class SessionManager:
 
         if cleaned_count > 0:
             self.__logger.info(f"启动时清理了 {cleaned_count} 个过期会话")
-            self.commit_data(is_info=False)
+            await self.commit_data(is_info=False)
 
     def _is_session_expired(self, session: _SessionObject, current_time: float) -> bool:
         """
@@ -506,30 +493,39 @@ class SessionManager:
         if session.status == SessionStatus.INACTIVE:
             if session.gc_timeout_stamp and current_time > session.gc_timeout_stamp:
                 return True
-        elif session.status == SessionStatus.ACTIVE and session.timeout:
+        elif session.status == SessionStatus.ACTIVE:
+            timeout = (
+                session.timeout
+                if session.timeout is not None
+                else _SessionObject.DEFAULT_TIMEOUT
+            )
             elapsed = current_time - session.last_operate
-            if elapsed > session.timeout:
+            if elapsed > timeout:
                 if session.inactive_gc_timeout > 0:
-                    if elapsed > session.timeout + session.inactive_gc_timeout:
+                    if elapsed > timeout + session.inactive_gc_timeout:
                         return True
                 else:
                     return True
         return False
 
-    def commit_data(self, is_info: bool = True):
+    async def commit_data(self, is_info: bool = True):
         """
-        持久化会话数据到文件
+        持久化会话数据到文件（异步）
 
         将当前所有会话数据序列化保存到 sessions.pickle 文件。
-        建议在程序退出前调用，或在 is_auto_commit=False 时手动调用。
+        使用 asyncio.to_thread() 将同步 I/O 操作卸载到线程池，避免阻塞事件循环。
 
         Args:
             is_info: 是否记录日志，批量操作时可设为 False 减少日志量
         """
         try:
             data_path = os.path.join(self.__commit_path, "sessions.pickle")
-            with open(data_path, "wb") as f:
-                pickle.dump(self.__sessions, f)
+
+            def _sync_write():
+                with open(data_path, "wb") as f:
+                    pickle.dump(self.__sessions, f)
+
+            await asyncio.to_thread(_sync_write)
             if is_info:
                 self.__logger.debug("持久化session会话数据成功")
         except Exception as e:
@@ -591,7 +587,7 @@ class SessionManager:
             self.__sessions[scope] = {}
         return self.__sessions[scope]
 
-    def __update_last_op(self, session: _SessionObject):
+    async def __update_last_op(self, session: _SessionObject):
         """
         更新会话的最后操作时间
 
@@ -600,7 +596,7 @@ class SessionManager:
         """
         session.last_operate = time()
         if self.__is_auto_commit:
-            self.commit_data(is_info=False)
+            await self.commit_data(is_info=False)
 
     def __get_reply_params(self, obj) -> Dict:
         """
@@ -745,9 +741,13 @@ class SessionManager:
 
         在 Bot 启动时调用，创建会话管理循环协程。
         该循环负责定期检查超时和执行垃圾回收。
+        同时在启动时异步加载持久化的会话数据。
         """
         if not self.__is_running:
             loop.create_task(self.__manager_loop(loop))
+            if not self.__data_loaded:
+                loop.create_task(self.fetch_data())
+                self.__data_loaded = True
             self.__is_running = True
 
     async def __manager_loop(self, loop: AbstractEventLoop):
@@ -827,11 +827,11 @@ class SessionManager:
             self.__logger.debug(f"GC清理完成：删除了 {deleted_count} 个过期会话")
 
         if self.__is_auto_commit:
-            self.commit_data(is_info=False)
+            await self.commit_data(is_info=False)
 
     # -*- 会话管理方法（内部实现） -*-
 
-    def _new(
+    async def _new(
         self,
         obj,
         scope: str,
@@ -864,7 +864,7 @@ class SessionManager:
             data: 会话数据
             identify: 标识
             is_replace: 是否替换现有会话
-            timeout: 超时时间
+            timeout: 超时时间（秒），默认 1800 秒（30 分钟）
             timeout_reply: 超时回复
             inactive_gc_timeout: 非活动会话回收时间
             send_reply_on_msg_id_expired: msg_id 过期后是否仍发送消息
@@ -890,10 +890,14 @@ class SessionManager:
 
         reply_params = self.__get_reply_params(obj)
 
+        actual_timeout = (
+            timeout if timeout is not None else _SessionObject.DEFAULT_TIMEOUT
+        )
+
         target_sessions[key] = _SessionObject(
             status=SessionStatus.ACTIVE,
             data=data if data is not None else {},
-            timeout=timeout,
+            timeout=actual_timeout,
             last_operate=time(),
             timeout_reply=timeout_reply,
             inactive_gc_timeout=inactive_gc_timeout,
@@ -905,11 +909,11 @@ class SessionManager:
         )
 
         if self.__is_auto_commit:
-            self.commit_data(is_info=False)
+            await self.commit_data(is_info=False)
 
         return SessionObject(scope, SessionStatus.ACTIVE, key, data, identify)
 
-    def _get(
+    async def _get(
         self,
         obj,
         scope: str,
@@ -946,18 +950,17 @@ class SessionManager:
                 return default
             target_session = target_sessions[key]
 
-        # 如果 session 已经是 INACTIVE 状态，返回 default
         if target_session.status == SessionStatus.INACTIVE:
             return default
 
         if not skip_update_last_op:
-            self.__update_last_op(target_session)
+            await self.__update_last_op(target_session)
 
         return SessionObject(
             scope, target_session.status, key, target_session.data, identify
         )
 
-    def _update(
+    async def _update(
         self,
         obj,
         scope: str,
@@ -993,7 +996,7 @@ class SessionManager:
 
         target_session = target_sessions[key]
         target_session.data.update(data)
-        self.__update_last_op(target_session)
+        await self.__update_last_op(target_session)
 
         return SessionObject(
             scope, target_session.status, key, target_session.data, identify
@@ -1164,10 +1167,12 @@ class SessionManager:
         这是使用 SessionManager 的推荐方式。绑定后，所有会话操作
         都会自动从绑定的消息对象中提取 identify，无需手动传入。
 
+        注意：所有修改操作都是异步方法，需要在异步上下文中调用。
+
         使用示例：
             with session.bind(msg) as s:
-                s.new(Scope.USER, "key", {"data": "value"})
-                data = s.get(Scope.USER, "key")
+                await s.new(Scope.USER, "key", {"data": "value"})
+                data = await s.get(Scope.USER, "key")
 
         Args:
             obj: 消息或事件对象
@@ -1182,7 +1187,7 @@ class SessionManager:
         finally:
             self._current_obj = old_obj
 
-    def new(
+    async def new(
         self,
         scope: str,
         key: Hashable,
@@ -1213,7 +1218,7 @@ class SessionManager:
             data: 会话数据
             identify: 标识
             is_replace: 是否替换现有会话
-            timeout: 超时时间
+            timeout: 超时时间（秒），默认 1800 秒（30 分钟）
             timeout_reply: 超时回复
             inactive_gc_timeout: 非活动会话回收时间
             send_reply_on_msg_id_expired: msg_id 过期后是否仍发送消息
@@ -1223,7 +1228,7 @@ class SessionManager:
         """
         if self._current_obj is None:
             raise ValueError("请先使用 with session.bind(obj) 绑定消息对象")
-        return self._new(
+        return await self._new(
             self._current_obj,
             scope,
             key,
@@ -1236,7 +1241,7 @@ class SessionManager:
             send_reply_on_msg_id_expired,
         )
 
-    def get(
+    async def get(
         self,
         scope: str,
         key: Hashable,
@@ -1259,11 +1264,11 @@ class SessionManager:
         """
         if self._current_obj is None:
             return default
-        return self._get(
+        return await self._get(
             self._current_obj, scope, key, identify, default, skip_update_last_op
         )
 
-    def update(
+    async def update(
         self,
         scope: str,
         key: Hashable,
@@ -1284,9 +1289,9 @@ class SessionManager:
         """
         if self._current_obj is None:
             raise ValueError("请先使用 with session.bind(obj) 绑定消息对象")
-        return self._update(self._current_obj, scope, key, data, identify)
+        return await self._update(self._current_obj, scope, key, data, identify)
 
-    def remove(
+    async def remove(
         self,
         scope: str = None,
         identify: Hashable = None,
@@ -1304,7 +1309,6 @@ class SessionManager:
             self.__sessions = {x: {} for x in _AllScopeStr}
             return
 
-        # 如果没有提供 identify，尝试从当前绑定的对象获取
         if identify is None and self._current_obj is not None:
             identify = self.__check_identify(scope, self._current_obj)
 
@@ -1314,14 +1318,14 @@ class SessionManager:
         if not key and not identify:
             target_sessions.clear()
             if self.__is_auto_commit:
-                self.commit_data(is_info=False)
+                await self.commit_data(is_info=False)
             return
 
         if not key and identify:
             if identify in target_sessions:
                 target_sessions[identify] = {}
                 if self.__is_auto_commit:
-                    self.commit_data(is_info=False)
+                    await self.commit_data(is_info=False)
             return
 
         if identify:
@@ -1334,7 +1338,7 @@ class SessionManager:
 
         target_sessions.pop(key)
         if self.__is_auto_commit:
-            self.commit_data(is_info=False)
+            await self.commit_data(is_info=False)
 
     def wait_for_message_checker(
         self, obj: Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]
@@ -1421,13 +1425,14 @@ def with_session(func):
         @bot.on_guild_message
         @with_session
         async def handle_message(msg, session=None):
-            # session 已经绑定到 msg，可以直接使用
-            session.new(Scope.USER, "key", {"data": "value"})
-            data = session.get(Scope.USER, "key")
+            # session 已经绑定到 msg，可以直接使用（需要 await）
+            await session.new(Scope.USER, "key", {"data": "value"})
+            data = await session.get(Scope.USER, "key")
 
     注意：
         - 装饰器必须在 @bot.on_xxx 之后（先注册事件，再注入 session）
         - 函数签名必须包含 session=None 参数
+        - 所有 session 操作都是异步的，需要使用 await
     """
 
     @wraps(func)

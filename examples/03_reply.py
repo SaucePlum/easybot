@@ -149,10 +149,17 @@ def main():
             )
 
         # ----- 3.12 引用回复原消息 -----
+        # 方式一：使用 reply() 的 reference 参数（推荐）
+        # 适用于所有场景（频道/群聊/单聊/私信）
         elif msg.treated_msg == "引用":
+            await msg.reply("这是引用回复", reference=True)
+
+        # 方式二：使用 MessagesModel.Message 构建引用消息
+        elif msg.treated_msg == "引用构建器":
             await msg.reply(
                 MessagesModel.Message(
-                    content="这是引用回复", message_reference_id=msg.id  # 引用原消息
+                    content="这是引用回复",
+                    message_reference_id=msg.id,
                 )
             )
 

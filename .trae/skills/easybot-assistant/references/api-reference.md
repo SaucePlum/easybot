@@ -188,14 +188,18 @@ await bot.api.patch_guild_message(
 msg = await bot.api.send_group_message(
     group_openid="group_openid",
     content="Hello!",
-    event_id="event_id",  # 被动消息需要
+)
+
+msg = await bot.api.send_group_message(
+    group_openid="group_openid",
+    content="Hello!",
+    event_id="event_id",
 )
 
 # Markdown 消息
 msg = await bot.api.send_group_message(
     group_openid="group_openid",
     content=MessagesModel.MessageMarkdown(content="# 标题"),
-    event_id="event_id",
 )
 ```
 
@@ -218,6 +222,11 @@ await bot.api.recall_group_message("group_openid", "message_id")
 发送单聊消息。
 
 ```python
+msg = await bot.api.send_c2c_message(
+    openid="user_openid",
+    content="Hello!",
+)
+
 msg = await bot.api.send_c2c_message(
     openid="user_openid",
     content="Hello!",
@@ -513,7 +522,7 @@ await bot.api.demand_guild_api_permission(
 await bot.api.create_announces(
     guild_id="guild_id",
     message_id="message_id",
-    channel_id="channel_id"
+    channel_id="channel_id",
 )
 
 # 删除公告

@@ -16,26 +16,32 @@ EasyBot SDK 示例 08：插件 & 权限系统使用方法
 
 from re import compile as re_compile
 
-from easybot import Bot, BotAdminManager, CommandValidScenes, Model
+from easybot import Bot, CommandValidScenes, Model
 
 
-def main():
+def main() -> None:
     # 初始化机器人（管理员通过 BotAdminManager 独立管理，支持持久化）
-    bot = Bot(
+    bot: Bot = Bot(
         app_id="your_app_id",
         app_secret="your_app_secret",
     )
 
-    # 推荐方式：直接实例化 BotAdminManager，与 Bot 解耦
-    # 数据自动持久化到 sdk_data/bot_admins.yaml，重启不丢失
-    admin_mgr = BotAdminManager()
+    admin_mgr = bot.bot_admin_manager
 
-    # 设置默认管理员（合并式，立即持久化）
-    admin_mgr.bot_admins = ["admin_user_id_1", "admin_user_id_2"]
+    @bot.on_startup
+    async def init_bot_admins(event: Model.StartupEvent) -> None:
+        await admin_mgr.set_bot_admins(["admin_user_id_1", "admin_user_id_2"])
 
     # ==================== 8.1 基础指令注册 ====================
-    @bot.on_command(command="帮助")
-    async def cmd_help(msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage):
+    @bot.on_command(
+        command="帮助",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
+    async def cmd_help(
+        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
+    ) -> None:
         """注册 "帮助" 指令"""
         help_text = """可用指令：
 - 帮助 - 显示帮助信息
@@ -48,18 +54,28 @@ def main():
         await msg.reply(help_text)
 
     # ==================== 8.2 多指令别名 ====================
-    @bot.on_command(command=["hello", "你好", "hi", "嗨"])
+    @bot.on_command(
+        command=["hello", "你好", "hi", "嗨"],
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_hello(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """多个指令触发同一个功能"""
         await msg.reply("你好！很高兴见到你 😊")
 
     # ==================== 8.3 正则指令 ====================
-    @bot.on_command(regex=re_compile(r"查询 (\d+)"))
+    @bot.on_command(
+        regex=re_compile(r"查询 (\d+)"),
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_query(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """使用正则匹配指令
 
         msg.treated_msg 包含正则匹配的分组结果（元组）
@@ -67,8 +83,15 @@ def main():
         number = msg.treated_msg[0]  # 获取第一个分组
         await msg.reply(f"查询的号码是：{number}\n正在查询...")
 
-    @bot.on_command(regex=re_compile(r"计算 (\d+) \+ (\d+)"))
-    async def cmd_calc(msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage):
+    @bot.on_command(
+        regex=re_compile(r"计算 (\d+) \+ (\d+)"),
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
+    async def cmd_calc(
+        msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
+    ) -> None:
         """正则匹配多个分组"""
         a, b = int(msg.treated_msg[0]), int(msg.treated_msg[1])
         result = a + b
@@ -118,18 +141,26 @@ def main():
         command="超管指令",
         is_require_bot_admin=True,  # 要求机器人管理员
         bot_admin_error_msg="❌ 只有机器人管理员才能使用此指令",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
     )
     async def cmd_bot_admin(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """仅机器人管理员可用的指令"""
         await msg.reply("✅ 机器人管理员你好！这条指令只有机器人管理员可以使用")
 
     # ==================== 8.6 运行时管理管理员 ====================
-    @bot.on_command(command="添加管理员")
+    @bot.on_command(
+        command="添加管理员",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_add_admin(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """动态添加机器人管理员（仅现有管理员可执行）"""
         user_id = (
             msg.author.user_openid
@@ -144,13 +175,18 @@ def main():
 
         # 添加新管理员（示例，实际应从消息中解析用户ID）
         new_admin_id = "new_admin_user_id"
-        admin_mgr.add_admin(new_admin_id)
+        await admin_mgr.add_admin(new_admin_id)
         await msg.reply(f"✅ 已添加管理员：{new_admin_id}")
 
-    @bot.on_command(command="移除管理员")
+    @bot.on_command(
+        command="移除管理员",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_remove_admin(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """动态移除机器人管理员"""
         user_id = (
             msg.author.user_openid
@@ -163,13 +199,18 @@ def main():
             return
 
         admin_to_remove = "admin_to_remove_id"
-        admin_mgr.remove_admin(admin_to_remove)
+        await admin_mgr.remove_admin(admin_to_remove)
         await msg.reply(f"✅ 已移除管理员：{admin_to_remove}")
 
-    @bot.on_command(command="检查管理员")
+    @bot.on_command(
+        command="检查管理员",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_check_admin(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """检查当前用户是否为机器人管理员"""
         user_id = (
             msg.author.user_openid
@@ -182,10 +223,15 @@ def main():
         else:
             await msg.reply("❌ 你不是机器人管理员")
 
-    @bot.on_command(command="管理员列表")
+    @bot.on_command(
+        command="管理员列表",
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def cmd_admin_list(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """查看所有机器人管理员"""
         user_id = (
             msg.author.user_openid
@@ -202,10 +248,14 @@ def main():
         await msg.reply(f"机器人管理员列表：\n{admin_list}")
 
     # ==================== 8.7 预处理器 ====================
-    @bot.before_command(valid_scenes=CommandValidScenes.ALL)
+    @bot.before_command(
+        valid_scenes=CommandValidScenes.GUILD
+        | CommandValidScenes.GROUP
+        | CommandValidScenes.C2C,
+    )
     async def before_all(
         msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage,
-    ):
+    ) -> None:
         """
         在所有指令执行前运行
 

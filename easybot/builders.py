@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, BinaryIO
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from .models import ThreadContent, ThreadContentParagraph
@@ -71,7 +72,7 @@ class MessagesModel:
             # 本地图片
             msg = MessagesModel.Message(content="图片", file_image="./image.png")
 
-            # 引用回复
+            # 引用回复（所有场景都使用 MessageReference 对象格式）
             msg = MessagesModel.Message(content="回复", message_reference_id="msg_id")
 
             # 富媒体（v2 API）
@@ -755,15 +756,211 @@ class ThreadContentBuilder:
         return ThreadContent(paragraphs=self._paragraphs)
 
 
-class Builders:
+class TextChainBuilder:
     """
-    论坛内容构建器入口类
+    文本交互构建器
 
-    论坛内容构建类通过 Builders.xxx 访问。
+    用于构建文本消息中的交互元素，如@用户、指令操作、跳转子频道等。
+    所有方法返回字符串，可直接拼接到消息内容中。
+
+    支持的消息类型：
+        - 文本消息
+        - 图文消息
+        - Markdown 消息
 
     使用示例：
+        # @用户
+        content = TextChainBuilder.at_user("123456789")
+
+        # @全部成员
+        content = TextChainBuilder.at_everyone()
+
+        # 回车指令（点击后直接发送）
+        content = TextChainBuilder.cmd_enter("/help")
+
+        # 参数指令（点击后插入输入框）
+        content = TextChainBuilder.cmd_input("/search", show="点击搜索")
+
+        # 跳转子频道
+        content = TextChainBuilder.channel_link("123456789")
+    """
+
+    @staticmethod
+    def at_user(user_id: str) -> str:
+        """
+        构建@用户文本
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            str: @用户的文本标签
+
+        支持场景:
+            - 群聊
+            - 文字子频道
+
+        支持消息类型:
+            - 文本消息
+            - 图文消息
+            - Markdown 消息
+
+        使用示例:
+            >>> TextChainBuilder.at_user("123456789")
+            '<@!123456789>'
+        """
+        return f"<@!{user_id}>"
+
+    @staticmethod
+    def at_everyone() -> str:
+        """
+        构建@全部成员文本
+
+        Returns:
+            str: @全部成员的文本标签
+
+        支持场景:
+            - 仅文字子频道可用
+
+        注意:
+            需要机器人拥有发送 @全部成员 消息的权限
+
+        使用示例:
+            >>> TextChainBuilder.at_everyone()
+            '<@everyone>'
+        """
+        return "<@everyone>"
+
+    @staticmethod
+    def cmd_enter(text: str) -> str:
+        """
+        构建回车指令文本
+
+        用户点击后，文本直接发送。
+
+        Args:
+            text: 点击后发送的文本，最大 100 字符
+
+        Returns:
+            str: 回车指令标签
+
+        支持场景:
+            - 仅 Markdown 消息支持
+
+        使用示例:
+            >>> TextChainBuilder.cmd_enter("/help")
+            '<qqbot-cmd-enter text="%2Fhelp" />'
+        """
+        if len(text) > 100:
+            raise ValueError("text 最大限制 100 字符")
+        encoded_text = quote(text, safe="")
+        return f'<qqbot-cmd-enter text="{encoded_text}" />'
+
+    @staticmethod
+    def cmd_input(
+        text: str,
+        show: str | None = None,
+        reference: bool = False,
+    ) -> str:
+        """
+        构建参数指令文本
+
+        用户点击后，文本插入输入框，用户可自行编辑发送。
+
+        Args:
+            text: 点击后插入输入框的文本，最大 100 字符
+            show: 用户在消息内看到的文本，默认取 text 值，最大 100 字符
+            reference: 插入输入框时是否带消息原文回复引用，默认 False
+
+        Returns:
+            str: 参数指令标签
+
+        支持场景:
+            - 仅 Markdown 消息支持
+
+        使用示例:
+            >>> TextChainBuilder.cmd_input("/search", show="点击搜索")
+            '<qqbot-cmd-input text="%2Fsearch" show="%E7%82%B9%E5%87%BB%E6%90%9C%E7%B4%A2" reference="false" />'
+
+            >>> TextChainBuilder.cmd_input("/reply", reference=True)
+            '<qqbot-cmd-input text="%2Freply" reference="true" />'
+        """
+        if len(text) > 100:
+            raise ValueError("text 最大限制 100 字符")
+
+        encoded_text = quote(text, safe="")
+        reference_str = "true" if reference else "false"
+
+        if show is not None:
+            if len(show) > 100:
+                raise ValueError("show 最大限制 100 字符")
+            encoded_show = quote(show, safe="")
+            return f'<qqbot-cmd-input text="{encoded_text}" show="{encoded_show}" reference="{reference_str}" />'
+
+        return f'<qqbot-cmd-input text="{encoded_text}" reference="{reference_str}" />'
+
+    @staticmethod
+    def channel_link(channel_id: str) -> str:
+        """
+        构建跳转子频道文本
+
+        Args:
+            channel_id: 子频道 ID
+
+        Returns:
+            str: 跳转子频道标签
+
+        支持场景:
+            - 仅频道可用
+
+        注意:
+            仅支持当前频道内的子频道
+
+        使用示例:
+            >>> TextChainBuilder.channel_link("123456789")
+            '<#123456789>'
+        """
+        return f"<#{channel_id}>"
+
+    @staticmethod
+    def emoji(emoji_id: str) -> str:
+        """
+        构建系统表情文本
+
+        Args:
+            emoji_id: 系统表情 ID（仅支持 type=1 的系统表情）
+
+        Returns:
+            str: 表情标签
+
+        支持场景:
+            - 仅频道可用
+
+        注意:
+            - 仅支持 type=1 的系统表情
+            - type=2 的 emoji 表情直接按字符串填写即可
+
+        使用示例:
+            >>> TextChainBuilder.emoji("123")
+            '<emoji:123>'
+        """
+        return f"<emoji:{emoji_id}>"
+
+
+class Builders:
+    """
+    构建器入口类
+
+    所有构建器类通过 Builders.xxx 访问。
+
+    使用示例：
+        # 论坛内容构建
         content = Builders.ThreadContentBuilder().add_text_paragraph("文本").build()
+
+        # 文本交互构建
+        at_text = Builders.TextChainBuilder.at_user("123456789")
     """
 
     ParagraphBuilder = ParagraphBuilder
     ThreadContentBuilder = ThreadContentBuilder
+    TextChainBuilder = TextChainBuilder

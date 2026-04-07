@@ -11,8 +11,9 @@ EasyBot SDK 生命周期事件管理模块
 import asyncio
 import inspect
 import time
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
+
+from ..models import ShutdownEvent, StartupEvent, TimerEvent
 
 if TYPE_CHECKING:
     from ..bot import Bot
@@ -21,50 +22,6 @@ if TYPE_CHECKING:
 INTERNAL_EVENT_STARTUP = "INTERNAL_STARTUP"
 INTERNAL_EVENT_SHUTDOWN = "INTERNAL_SHUTDOWN"
 INTERNAL_EVENT_TIMER = "INTERNAL_TIMER"
-
-
-@dataclass
-class TimerEvent:
-    """
-    定时器事件数据
-
-    Attributes:
-        bot: Bot 实例
-        timestamp: 事件触发时间戳
-        tick_count: 第几次触发（从1开始）
-    """
-
-    bot: "Bot"
-    timestamp: float
-    tick_count: int
-
-
-@dataclass
-class StartupEvent:
-    """
-    启动事件数据
-
-    Attributes:
-        bot: Bot 实例
-        timestamp: 事件触发时间戳
-    """
-
-    bot: "Bot"
-    timestamp: float
-
-
-@dataclass
-class ShutdownEvent:
-    """
-    关闭事件数据
-
-    Attributes:
-        bot: Bot 实例
-        timestamp: 事件触发时间戳
-    """
-
-    bot: "Bot"
-    timestamp: float
 
 
 class LifecycleManager:

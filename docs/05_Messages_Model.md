@@ -81,15 +81,22 @@ msg = MessagesModel.Message(content="本地图片", file_image="./photo.png")
 # 方式2：bytes 数据
 msg = MessagesModel.Message(content="Bytes图片", file_image=image_bytes)
 ```
-
 **引用回复**：
 
 ```python
+# 方式一：使用 reply() 的 reference 参数（推荐）
+# 适用于所有场景（频道/群聊/单聊/私信）
+await msg.reply("我同意你的观点", reference=True)
+
+# 方式二：使用 MessagesModel.Message 构建引用消息
 msg = MessagesModel.Message(
     content="我同意你的观点",
-    message_reference_id="原消息ID",
+    message_reference_id=msg.id,
 )
+await msg.reply(msg)
 ```
+
+### 2.3 注意事项
 
 **富媒体（群聊/单聊）**：
 
@@ -108,8 +115,7 @@ msg = MessagesModel.Message(
 )
 ```
 
-### 2.3 注意事项
-
+**注意事项**：
 - `image` 和 `file_image` 不能同时使用
 - `media_file_info` 与 `image`/`file_image` 互斥
 - `file_image` 仅适用于**频道消息**；群聊/单聊需使用 `media_file_info`
@@ -316,6 +322,14 @@ await bot.api.send_guild_message(channel_id="xxx", content=md)
 
 ### 7.4 Markdown + Keyboard 按钮
 
+`keyboard_content` 中的按钮动作 `action.type` 说明：
+
+| type | 类型 | data 说明 |
+|------|------|----------|
+| 0 | 跳转按钮 | `http(s)` 或客户端可识别的小程序 scheme |
+| 1 | 回调按钮 | 回调后台接口，`data` 原样透传给后台 |
+| 2 | 指令按钮 | 自动在输入框插入 `@bot` + `data` |
+
 ```python
 # 使用 Keyboard 模板
 md = MessagesModel.MessageMarkdown(
@@ -332,11 +346,11 @@ md = MessagesModel.MessageMarkdown(
                 "buttons": [
                     {
                         "render_data": {"label": "确认"},
-                        "action": {"type": 2, "data": "confirm", "reply": True}
+                        "action": {"type": 1, "data": "confirm", "reply": True}
                     },
                     {
                         "render_data": {"label": "取消"},
-                        "action": {"type": 2, "data": "cancel", "reply": True}
+                        "action": {"type": 1, "data": "cancel", "reply": True}
                     },
                 ]
             }
@@ -410,7 +424,168 @@ content = (Builders.ThreadContentBuilder()
 
 ---
 
-## 九、在不同场景中使用
+## 九、TextChainBuilder — 文本交互构建器
+
+用于构建文本消息中的交互元素，如@用户、指令操作、跳转子频道等。
+
+**模块**: `easybot.builders`  
+**导入**: `from easybot import Builders`
+
+### 9.1 基本使用
+
+```python
+from easybot import Builders
+
+# @用户
+content = Builders.TextChainBuilder.at_user("123456789")
+
+# @全体成员
+content = Builders.TextChainBuilder.at_everyone()
+
+# 回车指令（点击后直接发送）
+content = Builders.TextChainBuilder.cmd_enter("/help")
+
+# 参数指令（点击后插入输入框）
+content = Builders.TextChainBuilder.cmd_input("/search", show="点击搜索")
+
+# 跳转子频道
+content = Builders.TextChainBuilder.channel_link("123456789")
+
+# 系统表情
+content = Builders.TextChainBuilder.emoji("123")
+```
+
+### 9.2 组合使用
+
+可以将多个交互元素拼接在一起：
+
+```python
+from easybot import Builders
+
+# 组合使用
+content = (
+    Builders.TextChainBuilder.at_user("123456789") +
+    " 欢迎加入！\n" +
+    Builders.TextChainBuilder.cmd_enter("/help") +
+    " 查看帮助"
+)
+
+await msg.reply(content)
+```
+
+### 9.3 可用方法
+
+| 方法 | 说明 | 支持场景 |
+|------|------|---------|
+| `at_user(user_id)` | @指定用户 | 群聊、文字子频道 |
+| `at_everyone()` | @全体成员 | 仅文字子频道 |
+| `cmd_enter(text)` | 回车指令（直接发送） | 仅 Markdown 消息 |
+| `cmd_input(text, show, reference)` | 参数指令（插入输入框） | 仅 Markdown 消息 |
+| `channel_link(channel_id)` | 跳转子频道 | 仅频道 |
+| `emoji(emoji_id)` | 系统表情 | 仅频道 |
+
+### 9.4 方法详解
+
+#### at_user(user_id)
+
+构建@用户文本标签。
+
+```python
+# 示例
+at_text = Builders.TextChainBuilder.at_user("123456789")
+# 返回: '<@!123456789>'
+```
+
+**参数**：
+- `user_id` (str): 用户 ID
+
+**返回**: `str` - @用户的文本标签
+
+#### at_everyone()
+
+构建@全体成员文本标签。
+
+```python
+# 示例
+at_text = Builders.TextChainBuilder.at_everyone()
+# 返回: '<@everyone>'
+```
+
+**注意**: 需要机器人拥有发送"@全体成员"消息的权限。
+
+#### cmd_enter(text)
+
+构建回车指令文本标签。用户点击后，文本直接发送。
+
+```python
+# 示例
+cmd_text = Builders.TextChainBuilder.cmd_enter("/help")
+# 返回: '<qqbot-cmd-enter text="%2Fhelp" />'
+```
+
+**参数**：
+- `text` (str): 点击后发送的文本，最多 100 字符
+
+**返回**: `str` - 回车指令标签
+
+#### cmd_input(text, show, reference)
+
+构建参数指令文本标签。用户点击后，文本插入输入框，用户可自行编辑发送。
+
+```python
+# 示例 1: 基本用法
+cmd_text = Builders.TextChainBuilder.cmd_input("/search", show="点击搜索")
+# 返回: '<qqbot-cmd-input text="%2Fsearch" show="%E7%82%B9%E5%87%BB%E6%90%9C%E7%B4%A2" reference="false" />'
+
+# 示例 2: 带回复引用
+cmd_text = Builders.TextChainBuilder.cmd_input("/reply", reference=True)
+# 返回: '<qqbot-cmd-input text="%2Freply" reference="true" />'
+```
+
+**参数**：
+- `text` (str): 点击后插入输入框的文本，最多 100 字符
+- `show` (str | None): 用户在消息内看到的文本，默认取 `text` 值，最多 100 字符
+- `reference` (bool): 插入输入框时是否带消息原文回复引用，默认 `False`
+
+**返回**: `str` - 参数指令标签
+
+#### channel_link(channel_id)
+
+构建跳转子频道文本标签。
+
+```python
+# 示例
+link_text = Builders.TextChainBuilder.channel_link("123456789")
+# 返回: '<#123456789>'
+```
+
+**参数**：
+- `channel_id` (str): 子频道 ID
+
+**注意**: 仅支持当前频道内的子频道。
+
+**返回**: `str` - 跳转子频道标签
+
+#### emoji(emoji_id)
+
+构建系统表情文本标签。
+
+```python
+# 示例
+emoji_text = Builders.TextChainBuilder.emoji("123")
+# 返回: '<emoji:123>'
+```
+
+**参数**：
+- `emoji_id` (str): 系统表情 ID（仅支持 type=1 的系统表情）
+
+**注意**: type=2 的 emoji 表情直接按字符串填写即可。
+
+**返回**: `str` - 表情标签
+
+---
+
+## 十、在不同场景中使用
 
 所有消息构建器均可在以下 API 中使用：
 
@@ -430,7 +605,7 @@ await bot.api.send_direct_message(guild_id="xxx", content=md)
 
 ---
 
-## 十、下一步
+## 十一、下一步
 
 - [Model 库](./06_Model库.md) — 了解接收事件时的数据模型定义
 - [插件与权限](./07_插件与权限.md) — 学习插件开发和命令注册

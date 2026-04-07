@@ -107,3 +107,25 @@ class StopProcessing(EasyBotException):
     """
 
     pass
+
+
+class WaitError(Exception):
+    """
+    等待错误
+
+    当 wait_for() 注册的等待任务被意外删除时抛出，
+    通常发生在并发场景下多个处理器竞争同一消息时。
+    """
+
+    pass
+
+
+class WaitTimeoutError(Exception):
+    """
+    等待超时错误
+
+    当 wait_for() 在指定的超时时间内未收到匹配的消息时抛出，
+    调用方可以捕获此异常来执行超时后的处理逻辑。
+    """
+
+    pass

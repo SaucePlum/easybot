@@ -20,7 +20,96 @@ if TYPE_CHECKING:
     from .api import API
     from .builders import MessagesModel
 
-# 基础模型
+
+# ==================== 生命周期事件模型 ====================
+
+
+class SessionStatus:
+    """
+    会话状态枚举类
+
+    会话只有两种状态：活跃和非活跃。超时后会话会变为 INACTIVE，
+    然后由 GC 在指定时间后清理，这样可以给用户一个"缓冲期"来恢复会话。
+    """
+
+    ACTIVE = 0
+    INACTIVE = 1
+
+
+@dataclass
+class GatewayInfo:
+    """
+    Gateway 信息数据类
+
+    存储 /gateway/bot 接口返回的完整信息。
+    """
+
+    url: str
+    shards: int
+    session_total: int
+    session_remaining: int
+    session_reset_after: int
+    max_concurrency: int
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "GatewayInfo":
+        """从 API 响应创建 GatewayInfo 实例"""
+        session_limit = data.get("session_start_limit", {})
+        return cls(
+            url=data.get("url", ""),
+            shards=data.get("shards", 1),
+            session_total=session_limit.get("total", 1000),
+            session_remaining=session_limit.get("remaining", 1000),
+            session_reset_after=session_limit.get("reset_after", 0),
+            max_concurrency=session_limit.get("max_concurrency", 1),
+        )
+
+
+@dataclass
+class StartupEvent:
+    """
+    启动事件数据
+
+    Attributes:
+        bot: Bot 实例
+        timestamp: 事件触发时间戳
+    """
+
+    bot: "Bot"
+    timestamp: float
+
+
+@dataclass
+class ShutdownEvent:
+    """
+    关闭事件数据
+
+    Attributes:
+        bot: Bot 实例
+        timestamp: 事件触发时间戳
+    """
+
+    bot: "Bot"
+    timestamp: float
+
+
+@dataclass
+class TimerEvent:
+    """
+    定时器事件数据
+
+    Attributes:
+        bot: Bot 实例
+        timestamp: 事件触发时间戳
+        tick_count: 第几次触发（从1开始）
+    """
+
+    bot: "Bot"
+    timestamp: float
+    tick_count: int
+
+
+# ==================== 基础模型 ====================
 T = TypeVar("T", bound="BaseModel")
 
 _field_names_cache: dict[type, set[str]] = {}
@@ -2507,3 +2596,10 @@ class Model:
     StreamInputMode: TypeAlias = StreamInputMode
     StreamInputState: TypeAlias = StreamInputState
     StreamContentType: TypeAlias = StreamContentType
+
+    # 生命周期事件
+    StartupEvent: TypeAlias = StartupEvent
+    ShutdownEvent: TypeAlias = ShutdownEvent
+    TimerEvent: TypeAlias = TimerEvent
+    SessionStatus: TypeAlias = SessionStatus
+    GatewayInfo: TypeAlias = GatewayInfo

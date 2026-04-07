@@ -64,10 +64,11 @@ bot = Bot(
 
 ```python
 # 通过 bot_admin_manager 设置（支持持久化到 sdk_data/bot_admins.yaml）
-bot.bot_admin_manager.bot_admins = ["user_id_001", "user_id_002"]
+# 注意：以下方法都是异步的，需要在异步上下文中使用
+await bot.bot_admin_manager.set_bot_admins(["user_id_001", "user_id_002"])
 
 # 或增量添加
-bot.bot_admin_manager.add_admin("user_id_003")
+await bot.bot_admin_manager.add_admin("user_id_003")
 ```
 
 ### 1.3 生命周期方法
@@ -378,8 +379,10 @@ SDK 提供三个批量订阅装饰器，用于一次性订阅多个事件：
 **使用示例**：
 
 ```python
+from easybot import Model
+
 @bot.on_default_public_events
-async def handle_all_events(event):
+async def handle_all_events(event: Model.BaseModel) -> None:
     """接收所有公域默认事件"""
     bot.logger.info(f"收到事件: {event.__class__.__name__}")
 ```
@@ -441,7 +444,13 @@ async def on_timer(event: Model.TimerEvent):
 ```python
 async def reply(
     self,
-    content: str | MessagesModel,
+    content: str
+    | MessagesModel.Message
+    | MessagesModel.MessageEmbed
+    | MessagesModel.MessageArk23
+    | MessagesModel.MessageArk24
+    | MessagesModel.MessageArk37
+    | MessagesModel.MessageMarkdown,
     reference: bool = False,
 )
 ```
@@ -450,7 +459,7 @@ async def reply(
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `content` | `str \| MessagesModel` | — | 回复内容，支持文本或任意消息构建器 |
+| `content` | `str \| MessagesModel.Message/MessageEmbed/MessageArk23/24/37/MessageMarkdown` | — | 回复内容，支持文本或任意消息构建器 |
 | `reference` | `bool` | `False` | 是否引用原消息 |
 
 ### 7.2 使用示例
@@ -492,9 +501,86 @@ bot.start()
 
 > **注意**: `reply()` 会自动选择正确的 API 端点和参数，无需用户关心底层实现。
 
+### 7.4 通过 msg.api / bot.api 访问 API 实例
+
+所有支持 `reply()` 的消息模型都提供了 `api` 属性，可以直接访问 `API` 实例：
+
+- `msg.api`：在消息事件处理器中可用（`@bot.on_xxx`、`@bot.on_command`，以及插件方式的 `@Plugins.on_command` / `@Plugins.before_command` 等）
+- `bot.api`：在任意“能拿到 bot 实例”的上下文中可用（例如你的主程序、生命周期事件 `@bot.on_startup` / `@bot.on_shutdown` / `@bot.on_timer`，或 `@bot.on_xxx` / `@bot.on_command` 等闭包内）。**在生命周期回调中必须使用 `bot.api`，因为此时没有消息模型**；在仅使用 `@Plugins.xxx` 的插件模块里通常拿不到 `bot` 变量，此时应优先使用 `msg.api`
+
+```python
+@bot.on_guild_message
+async def handle(msg: Model.GuildMessage):
+    # 主动发送消息到其他子频道
+    await msg.api.send_guild_message(
+        channel_id="其他子频道ID",
+        content="主动消息"
+    )
+
+    # 创建论坛帖子
+    await msg.api.create_thread(
+        channel_id="论坛子频道ID",
+        title="帖子标题",
+        content="帖子内容"
+    )
+
+# 生命周期回调中必须使用 bot.api（此时没有 msg 对象）
+@bot.on_startup
+async def on_startup(event: Model.StartupEvent):
+    await bot.api.send_c2c_message(openid="用户ID", content="机器人已上线")
+```
+
+> **注意**: `msg.api` 只能在支持回复的事件模型中使用。`bot.api` 在任意上下文中可用，两者等价。
+
 ---
 
-## 八、下一步
+## 八、TextChainBuilder — 文本交互构建器
+
+用于构建文本消息中的交互元素，如@用户、指令操作、跳转子频道等。
+
+**模块**: `easybot.builders`  
+**导入**: `from easybot import Builders`
+
+### 8.1 快速示例
+
+```python
+from easybot import Bot, Builders, Model
+
+bot = Bot(app_id="...", app_secret="...")
+
+@bot.on_guild_message
+async def handle(msg: Model.GuildMessage) -> None:
+    # @用户
+    await msg.reply(Builders.TextChainBuilder.at_user("123456789") + " 你好！")
+    
+    # 组合使用
+    content = (
+        Builders.TextChainBuilder.at_user(msg.author.id) +
+        " 欢迎加入！\n" +
+        Builders.TextChainBuilder.cmd_enter("/help") +
+        " 查看帮助"
+    )
+    await msg.reply(content)
+
+bot.start()
+```
+
+### 8.2 可用方法
+
+| 方法 | 说明 | 支持场景 |
+|------|------|---------|
+| `at_user(user_id)` | @指定用户 | 群聊、文字子频道 |
+| `at_everyone()` | @全体成员 | 仅文字子频道 |
+| `cmd_enter(text)` | 回车指令（直接发送） | 仅 Markdown 消息 |
+| `cmd_input(text, show, reference)` | 参数指令（插入输入框） | 仅 Markdown 消息 |
+| `channel_link(channel_id)` | 跳转子频道 | 仅频道 |
+| `emoji(emoji_id)` | 系统表情 | 仅频道 |
+
+> **详细文档**: 完整的方法说明和示例请参考 [Messages Model — 文本交互构建器](./05_Messages_Model.md#九textchainbuilder--文本交互构建器)
+
+---
+
+## 九、下一步
 
 - [API 参考](./04_API参考.md) — 完整接口文档，消息发送、频道管理等
 - [Messages Model](./05_Messages_Model.md) — 掌握各种消息类型的构建方法

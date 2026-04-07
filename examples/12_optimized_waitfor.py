@@ -11,7 +11,7 @@ EasyBot SDK 示例 12：优化后的 wait_for 使用方法
 
 from re import compile as re_compile
 
-from easybot import Bot, Plugins, Scope, WaitTimeoutError
+from easybot import Bot, Model, Plugins, Scope, WaitTimeoutError
 
 
 def main() -> None:
@@ -22,7 +22,14 @@ def main() -> None:
 
     # ==================== 12.1 简洁的 wait_for 使用 ====================
     @bot.on_command(command="简单确认")
-    async def cmd_simple_confirm(msg) -> None:
+    async def cmd_simple_confirm(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
         """演示简洁的 wait_for 接口使用"""
         with bot.session.bind(msg) as s:
             await msg.reply("请回复「确认」或「取消」：")
@@ -45,7 +52,14 @@ def main() -> None:
 
     # ==================== 12.2 使用正则表达式 ====================
     @bot.on_command(command="数字输入")
-    async def cmd_number_input(msg) -> None:
+    async def cmd_number_input(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
         """演示使用正则表达式作为 wait_for 条件"""
         with bot.session.bind(msg) as s:
             await msg.reply("请输入一个 1-100 之间的数字：")
@@ -70,14 +84,28 @@ def main() -> None:
 
     # ==================== 12.3 使用谓词函数 ====================
     @bot.on_command(command="自定义匹配")
-    async def cmd_predicate_match(msg) -> None:
+    async def cmd_predicate_match(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
         """演示使用自定义谓词函数进行匹配"""
         with bot.session.bind(msg) as s:
             await msg.reply("请发送一条包含至少 3 个表情符号的消息：")
 
             try:
                 # 使用自定义谓词函数
-                def has_multiple_emojis(message):
+                def has_multiple_emojis(
+                    message: (
+                        Model.GuildMessage
+                        | Model.GroupMessage
+                        | Model.C2CMessage
+                        | Model.DirectMessage
+                    ),
+                ) -> bool:
                     """检查消息中是否包含至少3个表情符号"""
                     content = message.content
                     # 简单的表情检测（实际项目应使用更完善的方法）
@@ -98,7 +126,14 @@ def main() -> None:
 
     # ==================== 12.4 使用超时回调 ====================
     @bot.on_command(command="超时回调")
-    async def cmd_timeout_callback(msg) -> None:
+    async def cmd_timeout_callback(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
         """演示使用超时回调函数"""
         with bot.session.bind(msg) as s:
             await msg.reply("请在 10 秒内回复「收到」：")
@@ -123,7 +158,14 @@ def main() -> None:
 
     # ==================== 12.5 不指定命令（接受任意输入） ====================
     @bot.on_command(command="任意输入")
-    async def cmd_any_input(msg) -> None:
+    async def cmd_any_input(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
         """演示不指定 command，接受任何输入"""
         with bot.session.bind(msg) as s:
             await msg.reply("请随意说点什么：")
@@ -141,7 +183,14 @@ def main() -> None:
 
     # ==================== 12.6 插件命令动态管理 ====================
     @bot.on_command(command="管理命令")
-    async def cmd_manage_commands(msg) -> None:
+    async def cmd_manage_commands(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
         """演示插件命令的动态管理"""
 
         with bot.session.bind(msg) as s:

@@ -35,12 +35,12 @@ from easybot import MessagesModel
 ### 文本消息
 
 ```python
-msg = MessagesModel.Message(content="Hello World")
+content = MessagesModel.Message(content="Hello World")
 
 # 发送
-await bot.api.send_guild_message(channel_id="xxx", content=msg)
+await bot.api.send_guild_message(channel_id="xxx", content=content)
 # 或
-await msg_obj.reply(msg)
+await msg.reply(content)
 ```
 
 ### 带图片消息
@@ -70,7 +70,7 @@ with open("image.png", "rb") as f:
 
 ```python
 # 直接传字符串
-await msg_obj.reply("Hello World")
+await msg.reply("Hello World")
 
 # 字符串 + 图片
 await bot.api.send_guild_message(
@@ -91,7 +91,7 @@ Embed 是一种卡片式消息，适合展示结构化信息。
 ```python
 embed = MessagesModel.MessageEmbed(
     title="标题",
-    prompt="提示文本",  # 必填，消息列表显示的文本
+    prompt="提示文本",  # 建议填写，消息列表显示的文本
     content=[
         "第一行内容",
         "第二行内容",
@@ -100,7 +100,7 @@ embed = MessagesModel.MessageEmbed(
     image="https://example.com/image.png"  # 可选图片
 )
 
-await msg_obj.reply(embed)
+await msg.reply(embed)
 ```
 
 ### 完整示例
@@ -156,7 +156,7 @@ ark = MessagesModel.MessageArk23(
     prompt="提示文本"
 )
 
-await msg_obj.reply(ark)
+await msg.reply(ark)
 ```
 
 ### Ark24 模板（图文卡片）
@@ -172,7 +172,7 @@ ark = MessagesModel.MessageArk24(
     prompt="提示文本"
 )
 
-await msg_obj.reply(ark)
+await msg.reply(ark)
 ```
 
 ### Ark37 模板（大图卡片）
@@ -186,7 +186,7 @@ ark = MessagesModel.MessageArk37(
     prompt="提示文本"
 )
 
-await msg_obj.reply(ark)
+await msg.reply(ark)
 ```
 
 ---
@@ -200,7 +200,7 @@ md = MessagesModel.MessageMarkdown(
     content="# 标题\n**粗体** *斜体*\n- 列表项1\n- 列表项2"
 )
 
-await msg_obj.reply(md)
+await msg.reply(md)
 ```
 
 ### 模板 Markdown
@@ -216,7 +216,7 @@ md = MessagesModel.MessageMarkdown(
     }
 )
 
-await msg_obj.reply(md)
+await msg.reply(md)
 ```
 
 ### Markdown 示例
@@ -283,7 +283,7 @@ md = MessagesModel.MessageMarkdown(
     }
 )
 
-await msg_obj.reply(md)
+await msg.reply(md)
 ```
 
 ### 按钮类型
@@ -302,8 +302,16 @@ await msg_obj.reply(md)
 # 跳转按钮
 {
     "action": {
-        "type": 2,  # 2=跳转
-        "data": "https://example.com"  # 跳转URL
+        "type": 0,  # 0=跳转
+        "data": "https://example.com"  # 跳转URL或客户端可识别的小程序 scheme
+    }
+}
+
+# 指令按钮（自动在输入框插入 @bot + data）
+{
+    "action": {
+        "type": 2,  # 2=指令
+        "data": "/help"
     }
 }
 ```
@@ -345,21 +353,22 @@ await msg_obj.reply(md)
 ### 处理按钮点击
 
 ```python
+from easybot import Model
+
 @bot.on_interaction
-async def handle_interaction(msg):
-    button_data = msg.data.resolved.button_data
-    button_id = msg.data.resolved.button_id
+async def handle_interaction(msg: Model.Interaction) -> None:
+    resolved = msg.data.resolved if msg.data and msg.data.resolved else None
+    if not resolved:
+        return
+    button_data = resolved.button_data
+    button_id = resolved.button_id
     
     # 回应交互
     await bot.api.respond_interaction(interaction_id=msg.id, code=0)
     
     # 处理逻辑
     if button_data == "callback_data_1":
-        await bot.api.send_c2c_message(
-            openid=msg.user_openid,
-            content="你点击了按钮1",
-            event_id=msg.id
-        )
+        await msg.reply("你点击了按钮1")
 ```
 
 ### 完整示例
@@ -420,16 +429,12 @@ result = await bot.api.upload_media(
 
 ```python
 # 使用 Message 发送
-msg = MessagesModel.Message(
+content = MessagesModel.Message(
     content="图片消息",
     media_file_info=result.file_info
 )
 
-await bot.api.send_c2c_message(
-    openid="user_openid",
-    content=msg,
-    event_id="event_id"
-)
+await msg.reply(content)
 ```
 
 ---
@@ -467,6 +472,57 @@ builder.add_image("https://example.com/image.png")
 
 paragraph = builder.build()
 ```
+
+### TextChainBuilder - 文本交互构建器
+
+用于构建文本消息中的交互元素，如@用户、指令操作、跳转子频道等。
+
+```python
+from easybot import Builders
+
+# @用户
+at_text = Builders.TextChainBuilder.at_user("123456789")
+
+# @全体成员
+at_all = Builders.TextChainBuilder.at_everyone()
+
+# 回车指令（点击后直接发送）
+cmd = Builders.TextChainBuilder.cmd_enter("/help")
+
+# 参数指令（点击后插入输入框）
+cmd = Builders.TextChainBuilder.cmd_input("/search", show="点击搜索")
+
+# 跳转子频道
+link = Builders.TextChainBuilder.channel_link("123456789")
+
+# 系统表情
+emoji = Builders.TextChainBuilder.emoji("123")
+```
+
+**组合使用示例**：
+
+```python
+# 组合多个交互元素
+content = (
+    Builders.TextChainBuilder.at_user("123456789") +
+    " 欢迎加入！\n" +
+    Builders.TextChainBuilder.cmd_enter("/help") +
+    " 查看帮助"
+)
+
+await msg.reply(content)
+```
+
+**可用方法**：
+
+| 方法 | 说明 | 支持场景 |
+|------|------|---------|
+| `at_user(user_id)` | @指定用户 | 群聊、文字子频道 |
+| `at_everyone()` | @全体成员 | 仅文字子频道 |
+| `cmd_enter(text)` | 回车指令（直接发送） | 仅 Markdown 消息 |
+| `cmd_input(text, show, reference)` | 参数指令（插入输入框） | 仅 Markdown 消息 |
+| `channel_link(channel_id)` | 跳转子频道 | 仅频道 |
+| `emoji(emoji_id)` | 系统表情 | 仅频道 |
 
 ---
 

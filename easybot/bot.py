@@ -175,7 +175,8 @@ class Bot:
                 f"计算后的 Intent 值: {self._intents} (0x{self._intents:X})"
             )
 
-        # 启动会话管理器
+        await self._bot_admin_manager.initialize()
+
         self._session_manager.start(asyncio.get_event_loop())
 
         await self.protocol.run(self)
@@ -1016,6 +1017,26 @@ class Bot:
         self._lifecycle.register_shutdown(func)
         return func
 
+    def _build_module_name_from_path(
+        self, plugin_file: Path, plugins_path: Path
+    ) -> str:
+        """
+        根据插件文件路径构建模块名
+
+        Args:
+            plugin_file: 插件文件路径
+            plugins_path: 插件根目录路径
+
+        Returns:
+            模块名（支持子目录结构）
+        """
+        rel_path = plugin_file.relative_to(plugins_path)
+        parts = list(rel_path.parts)
+        if len(parts) > 1:
+            return ".".join(parts[:-1] + [plugin_file.stem])
+        else:
+            return plugin_file.stem
+
     def _preload_plugins_for_intents(self) -> None:
         """
         预加载插件以注册必要的Intent
@@ -1041,12 +1062,9 @@ class Bot:
                 continue
 
             try:
-                rel_path = plugin_file.relative_to(plugins_path)
-                parts = list(rel_path.parts)
-                if len(parts) > 1:
-                    module_name = ".".join(parts[:-1] + [plugin_file.stem])
-                else:
-                    module_name = plugin_file.stem
+                module_name = self._build_module_name_from_path(
+                    plugin_file, plugins_path
+                )
 
                 spec = importlib.util.spec_from_file_location(module_name, plugin_file)
                 if spec and spec.loader:
@@ -1067,7 +1085,7 @@ class Bot:
         """
         加载插件目录中的插件
 
-        扫描插件目录，加载所有 Python 模块，并调用每个模块中的 register() 函数
+        扫描插件目录，加载所有 Python 模块，自动注册通过装饰器定义的命令和预处理器
         """
         if not self.auto_load_plugins:
             return
@@ -1096,12 +1114,9 @@ class Bot:
                 continue
 
             try:
-                rel_path = plugin_file.relative_to(plugins_path)
-                parts = list(rel_path.parts)
-                if len(parts) > 1:
-                    module_name = ".".join(parts[:-1] + [plugin_file.stem])
-                else:
-                    module_name = plugin_file.stem
+                module_name = self._build_module_name_from_path(
+                    plugin_file, plugins_path
+                )
 
                 spec = importlib.util.spec_from_file_location(module_name, plugin_file)
                 if spec and spec.loader:
@@ -1126,28 +1141,12 @@ class Bot:
                     has_new_commands = commands_after > commands_before
                     has_new_preprocessors = preprocessors_after > preprocessors_before
 
-                    if hasattr(module, "register"):
-                        register_func = getattr(module, "register")
-                        if callable(register_func):
-                            Plugins._current_loading_module = module_name
-                            try:
-                                register_func(self)
-                            finally:
-                                Plugins._current_loading_module = None
-                            loaded_count += 1
-                            self.logger.info(
-                                f"成功加载插件 (register): {plugin_file.name}"
-                            )
-                        else:
-                            self.logger.warning(
-                                f"插件 {plugin_file.name} 的 register 不是可调用对象"
-                            )
-                    elif has_new_commands or has_new_preprocessors:
+                    if has_new_commands or has_new_preprocessors:
                         loaded_count += 1
-                        self.logger.info(f"成功加载插件 (装饰器): {plugin_file.name}")
+                        self.logger.info(f"成功加载插件: {plugin_file.name}")
                     else:
                         self.logger.debug(
-                            f"插件 {plugin_file.name} 没有 register 函数且未使用装饰器，跳过"
+                            f"插件 {plugin_file.name} 未使用装饰器注册命令或预处理器，跳过"
                         )
             except Exception as e:
                 self.logger.error(f"加载插件 {plugin_file.name} 时出错: {e}")

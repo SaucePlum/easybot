@@ -10,18 +10,18 @@ EasyBot SDK 示例 05：注册开始/结束/定时事件
 运行前请将 app_id 和 app_secret 替换为你的机器人凭证
 """
 
-from easybot import Bot
+from easybot import Bot, Model
 
 
-def main():
-    bot = Bot(
+def main() -> None:
+    bot: Bot = Bot(
         app_id="your_app_id",
         app_secret="your_app_secret",
     )
 
     # ==================== 5.1 启动事件 ====================
     @bot.on_startup
-    async def on_startup(event):
+    async def on_startup(event: Model.StartupEvent) -> None:
         """
         机器人启动时触发
 
@@ -47,7 +47,7 @@ def main():
 
     # ==================== 5.2 关闭事件 ====================
     @bot.on_shutdown
-    async def on_shutdown(event):
+    async def on_shutdown(event: Model.ShutdownEvent) -> None:
         """
         机器人关闭时触发
 
@@ -72,7 +72,7 @@ def main():
 
     # ==================== 5.3 定时事件 ====================
     @bot.on_timer(interval=60)  # 每60秒执行一次
-    async def on_timer(event):
+    async def on_timer(event: Model.TimerEvent) -> None:
         """
         定时任务
 
@@ -95,12 +95,12 @@ def main():
 
     # ==================== 多个不同间隔的定时任务 ====================
     @bot.on_timer(interval=300)  # 每5分钟
-    async def on_timer_5min(event):
+    async def on_timer_5min(event: Model.TimerEvent) -> None:
         """5分钟定时任务"""
         bot.logger.info("5分钟定时任务执行")
 
     @bot.on_timer(interval=3600)  # 每小时
-    async def on_timer_hourly(event):
+    async def on_timer_hourly(event: Model.TimerEvent) -> None:
         """每小时定时任务"""
         bot.logger.info("每小时定时任务执行")
 

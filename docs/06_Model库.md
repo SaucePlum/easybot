@@ -410,8 +410,10 @@ class Payload(BaseModel):
 **使用示例**：
 
 ```python
+from easybot import Model
+
 @bot.on_all_intent_events
-async def handle_event(event):
+async def handle_event(event: Model.BaseModel) -> None:
     if event.opcode == Model.OpCode.DISPATCH:
         print(f"事件类型: {event.event_type}")
 ```

@@ -55,35 +55,42 @@ Scope.GLOBAL  # 全局级别 - 整个机器人共享
 使用 `session.bind()` 上下文管理器绑定消息：
 
 ```python
+from easybot import Model
+
 @bot.on_command(command="test")
-async def test_cmd(msg):
+async def test_cmd(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     with bot.session.bind(msg) as s:
         # s 自动从 msg 中提取用户标识
-        s.new(Scope.USER, "key", {"data": "value"})
-        session = s.get(Scope.USER, "key")
+        # 注意：所有会话操作都是异步方法
+        await s.new(Scope.USER, "key", {"data": "value"})
+        session = await s.get(Scope.USER, "key")
 ```
 
 ### 创建会话
 
 ```python
 with bot.session.bind(msg) as s:
-    # 创建新会话
-    s.new(
+    # 创建新会话（异步方法）
+    await s.new(
         scope=Scope.USER,
         key="game_state",
         data={"score": 0, "level": 1},
-        timeout=3600,  # 1小时超时
+        timeout=3600,  # 1小时超时（默认 1800 秒/30 分钟）
         timeout_reply="游戏会话已过期",  # 超时提示
         inactive_gc_timeout=300,  # 超时后5分钟清理
     )
 ```
 
+> **重要说明**：`timeout` 参数有默认值 **1800 秒（30 分钟）**。即使不显式设置，会话也会在 30 分钟无操作后自动超时，防止永久占用内存和存储。
+
 ### 获取会话
 
 ```python
 with bot.session.bind(msg) as s:
-    # 获取会话
-    session = s.get(Scope.USER, "game_state")
+    # 获取会话（异步方法）
+    session = await s.get(Scope.USER, "game_state")
     
     if session:
         print(f"分数: {session.data['score']}")
@@ -91,18 +98,18 @@ with bot.session.bind(msg) as s:
         print("会话不存在")
     
     # 带默认值
-    session = s.get(Scope.USER, "game_state", default=None)
+    session = await s.get(Scope.USER, "game_state", default=None)
     
     # 窥视模式（不更新最后操作时间）
-    session = s.get(Scope.USER, "game_state", skip_update_last_op=True)
+    session = await s.get(Scope.USER, "game_state", skip_update_last_op=True)
 ```
 
 ### 更新会话
 
 ```python
 with bot.session.bind(msg) as s:
-    # 更新会话数据（合并）
-    s.update(Scope.USER, "game_state", {
+    # 更新会话数据（合并，异步方法）
+    await s.update(Scope.USER, "game_state", {
         "score": 100,
         "new_field": "value"
     })
@@ -112,14 +119,14 @@ with bot.session.bind(msg) as s:
 
 ```python
 with bot.session.bind(msg) as s:
-    # 删除特定会话
-    s.remove(scope=Scope.USER, key="game_state")
+    # 删除特定会话（异步方法）
+    await s.remove(scope=Scope.USER, key="game_state")
     
     # 删除用户所有会话
-    s.remove(scope=Scope.USER)
+    await s.remove(scope=Scope.USER)
     
     # 清空所有会话
-    s.remove()
+    await s.remove()
 ```
 
 ---
@@ -167,10 +174,12 @@ async def wait_for(
 ### 基本用法
 
 ```python
-from easybot import Scope, WaitTimeoutError, WaitError
+from easybot import Model, Scope, WaitTimeoutError, WaitError
 
 @bot.on_command(command="确认")
-async def confirm_cmd(msg):
+async def confirm_cmd(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     with bot.session.bind(msg) as s:
         await msg.reply("请在30秒内回复「是」或「否」")
         
@@ -255,7 +264,7 @@ result = await s.wait_for(
 ### 超时回调
 
 ```python
-async def on_timeout():
+def on_timeout():
     bot.logger.info("等待超时")
 
 result = await s.wait_for(
@@ -284,8 +293,8 @@ bot = Bot(
 ### 手动持久化
 
 ```python
-# 手动保存
-bot.session.commit_data()
+# 手动保存（异步方法）
+await bot.session.commit_data()
 
 # 批量操作时关闭自动保存
 # （需要在 SessionManager 初始化时设置 is_auto_commit=False）
@@ -296,11 +305,15 @@ bot.session.commit_data()
 程序重启后会话会自动恢复：
 
 ```python
+from easybot import Model
+
 @bot.on_command(command="继续")
-async def continue_game(msg):
+async def continue_game(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     with bot.session.bind(msg) as s:
         # 尝试恢复之前的会话
-        session = s.get(Scope.USER, "game_state")
+        session = await s.get(Scope.USER, "game_state")
         if session:
             await msg.reply(f"继续游戏，当前分数: {session.data['score']}")
         else:
@@ -315,7 +328,7 @@ async def continue_game(msg):
 
 ```python
 with bot.session.bind(msg) as s:
-    s.new(
+    await s.new(
         scope=Scope.USER,
         key="waiting_payment",
         data={"order_id": "12345"},
@@ -328,14 +341,15 @@ with bot.session.bind(msg) as s:
 ### 会话状态检查
 
 ```python
-from easybot import SessionStatus
+from easybot.models import SessionStatus
 
-session = s.get(Scope.USER, "key")
-if session:
-    if session.status == SessionStatus.ACTIVE:
-        print("会话活跃")
-    elif session.status == SessionStatus.INACTIVE:
-        print("会话已过期")
+with bot.session.bind(msg) as s:
+    session = await s.get(Scope.USER, "key")
+    if session:
+        if session.status == SessionStatus.ACTIVE:
+            print("会话活跃")
+        elif session.status == SessionStatus.INACTIVE:
+            print("会话已过期")
 ```
 
 ### with_session 装饰器
@@ -343,21 +357,30 @@ if session:
 简化会话绑定的装饰器：
 
 ```python
-from easybot import with_session
+from easybot import BoundSession, Model, Scope, with_session
 
 @bot.on_command(command="test")
 @with_session  # 自动注入 session 参数
-async def test_cmd(msg, session=None):
-    # session 已绑定到 msg
-    session.new(Scope.USER, "key", {"data": "value"})
-    data = session.get(Scope.USER, "key")
+async def test_cmd(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+    session: BoundSession | None = None,
+) -> None:
+    # session 已绑定到 msg，所有操作都是异步方法
+    if not session:
+        return
+    await session.new(Scope.USER, "key", {"data": "value"})
+    data = await session.get(Scope.USER, "key")
 ```
 
 ### 多步骤表单
 
 ```python
+from easybot import Model
+
 @bot.on_command(command="注册")
-async def register(msg):
+async def register(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     with bot.session.bind(msg) as s:
         # 步骤1：获取用户名
         await msg.reply("请输入用户名：")
@@ -378,7 +401,7 @@ async def register(msg):
         )
         
         # 保存数据
-        s.new(Scope.USER, "profile", {
+        await s.new(Scope.USER, "profile", {
             "username": username,
             "email": email
         })
@@ -388,15 +411,19 @@ async def register(msg):
 ### 游戏状态管理
 
 ```python
+from easybot import Model
+
 @bot.on_command(command="猜数字")
-async def guess_number(msg):
+async def guess_number(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     import random
     target = random.randint(1, 100)
     attempts = 0
     
     with bot.session.bind(msg) as s:
         # 保存游戏状态
-        s.new(
+        await s.new(
             scope=Scope.USER,
             key="guess_game",
             data={"target": target, "attempts": 0},
@@ -420,14 +447,14 @@ async def guess_number(msg):
                     continue
                 
                 # 更新尝试次数
-                session = s.get(Scope.USER, "guess_game")
-                s.update(Scope.USER, "guess_game", {
+                session = await s.get(Scope.USER, "guess_game")
+                await s.update(Scope.USER, "guess_game", {
                     "attempts": session.data["attempts"] + 1
                 })
                 
                 if guess == target:
                     await msg.reply(f"🎉 恭喜你猜对了！用了 {session.data['attempts'] + 1} 次")
-                    s.remove(scope=Scope.USER, key="guess_game")
+                    await s.remove(scope=Scope.USER, key="guess_game")
                     break
                 elif guess < target:
                     await msg.reply("太小了，再试试！")
@@ -436,7 +463,7 @@ async def guess_number(msg):
             
             except WaitTimeoutError:
                 await msg.reply(f"⏰ 超时！答案是 {target}")
-                s.remove(scope=Scope.USER, key="guess_game")
+                await s.remove(scope=Scope.USER, key="guess_game")
                 break
 ```
 
@@ -464,11 +491,5 @@ class SessionStatus:
 ## 异常类型
 
 ```python
-class WaitError(Exception):
-    """等待错误（等待任务被意外删除）"""
-    pass
-
-class WaitTimeoutError(Exception):
-    """等待超时错误"""
-    pass
+from easybot import WaitError, WaitTimeoutError
 ```

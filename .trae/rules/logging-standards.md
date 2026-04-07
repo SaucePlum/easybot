@@ -219,3 +219,135 @@ self.logger.debug("调试信息")  # ✅ 正确做法
 ### 异步安全
 - Logger 的所有方法都是同步的，可在异步代码中直接调用
 - 底层 logging 模块本身是线程安全的
+
+## 模块命名约定
+
+### 常用模块名称
+| 模块 | module_name | 说明 |
+|------|-------------|------|
+| Bot 主类 | `"bot"` | 机器人生命周期管理 |
+| API 封装 | `"api"` | HTTP API 调用 |
+| Protocol | `"protocol"` | 协议实现（WebSocket/Webhook） |
+| Session | `"session"` | 会话管理 |
+| Plugins | `"plugins"` | 插件系统 |
+| Lifecycle | `"lifecycle"` | 生命周期管理器 |
+| EventDispatcher | `"dispatcher"` | 事件分发器 |
+
+### 使用示例
+```python
+# Bot 类
+self.logger = Logger(bot_id=app_id, is_debug=is_debug, module_name="bot")
+
+# API 类（复用 bot 的配置）
+self._logger = bot.logger.with_module("api")
+
+# Protocol 类
+self.logger = bot.logger.with_module("protocol")
+```
+
+## 日志文件管理
+
+### 文件命名规则
+```
+logs/
+├── {bot_id_1}/
+│   ├── 2026-01-01.log
+│   ├── 2026-01-02.log
+│   └── ...
+└── {bot_id_2}/
+    ├── 2026-01-01.log
+    └── ...
+```
+
+### 轮转策略
+- **时间轮转**：每天午夜自动创建新文件
+- **命名格式**：`YYYY-MM-DD.log`
+- **保留策略**：不自动删除，由用户自行管理
+
+### 多机器人场景
+每个机器人实例有独立的日志目录，避免日志混淆：
+```python
+bot1 = Bot(app_id="bot1", app_secret="...")
+bot2 = Bot(app_id="bot2", app_secret="...")
+# 日志分别存储在 logs/bot1/ 和 logs/bot2/
+```
+
+## 调试模式配置
+
+### 启用调试日志
+```python
+# 方式1：构造函数参数
+bot = Bot(app_id="...", app_secret="...", is_debug=True)
+
+# 方式2：环境变量（需要自行实现）
+import os
+is_debug = os.getenv("EASYBOT_DEBUG", "false").lower() == "true"
+bot = Bot(app_id="...", app_secret="...", is_debug=is_debug)
+```
+
+### 调试日志内容
+调试模式下会输出：
+- WebSocket 连接详情
+- Intent 计算过程
+- 事件分发详情
+- API 请求和响应
+- 内部状态变化
+
+## 日志与异常处理配合
+
+### 异常日志记录模式
+```python
+async def risky_operation(self):
+    try:
+        result = await self.api.call()
+        return result
+    except APIError as e:
+        # 已知异常，记录关键信息
+        self.logger.error(f"API 调用失败 [code={e.code}]: {e.message}")
+        raise
+    except Exception as e:
+        # 未知异常，记录完整堆栈
+        self.logger.exception(f"未预期的异常: {e}")
+        raise
+```
+
+### 错误追踪
+使用 `trace_id` 追踪 API 错误：
+```python
+except APIError as e:
+    self.logger.error(
+        f"API 错误 [trace_id={e.trace_id}]: {e.message}"
+    )
+    # 可用于向用户反馈或提交 issue
+```
+
+## 日志输出控制
+
+### 禁用控制台输出
+```python
+# 仅输出到文件
+logger = Logger(
+    bot_id=app_id,
+    console_output=False
+)
+```
+
+### 禁用彩色输出
+```python
+# 使用纯文本输出（适用于日志收集系统）
+logger = Logger(
+    bot_id=app_id,
+    use_color=False
+)
+```
+
+### 自定义日志级别
+```python
+import logging
+
+# 显式设置日志级别
+logger = Logger(
+    bot_id=app_id,
+    level=logging.WARNING  # 只记录 WARNING 及以上级别
+)
+```

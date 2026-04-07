@@ -15,7 +15,6 @@
 import os
 from easybot import (
     Bot, Model, MessagesModel, CommandValidScenes,
-    Scope, WaitTimeoutError
 )
 
 bot = Bot(
@@ -91,9 +90,11 @@ async def customer_service(msg: Model.GuildMessage | Model.GroupMessage | Model.
     await msg.reply(md)
 
 @bot.on_interaction
-async def handle_interaction(msg):
-    """处理按钮交互"""
-    button_data = msg.data.resolved.button_data
+async def handle_interaction(msg: Model.Interaction) -> None:
+    resolved = msg.data.resolved if msg.data and msg.data.resolved else None
+    if not resolved:
+        return
+    button_data = resolved.button_data
     
     # 回应交互
     await bot.api.respond_interaction(interaction_id=msg.id, code=0)
@@ -107,11 +108,7 @@ async def handle_interaction(msg):
             prompt=info['q'],
             content=[info['a'], "请选择具体问题："]
         )
-        await bot.api.send_c2c_message(
-            openid=msg.user_openid,
-            content=embed,
-            event_id=msg.id
-        )
+        await msg.reply(embed)
     
     elif button_data.startswith("answer:"):
         question = button_data.split(":", 1)[1]
@@ -122,11 +119,7 @@ async def handle_interaction(msg):
             prompt=question[:20],
             content=[answer]
         )
-        await bot.api.send_c2c_message(
-            openid=msg.user_openid,
-            content=embed,
-            event_id=msg.id
-        )
+        await msg.reply(embed)
 
 if __name__ == "__main__":
     bot.start()

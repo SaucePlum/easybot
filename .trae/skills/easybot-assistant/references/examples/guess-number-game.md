@@ -29,7 +29,7 @@ async def guess_number_game(msg: Model.GuildMessage | Model.GroupMessage | Model
     
     with bot.session.bind(msg) as s:
         # 保存游戏状态
-        s.new(
+        await s.new(
             scope=Scope.USER,
             key="guess_game",
             data={
@@ -61,7 +61,7 @@ async def guess_number_game(msg: Model.GuildMessage | Model.GroupMessage | Model
                 # 检查退出命令
                 if user_input == "退出":
                     await msg.reply(f"游戏结束！答案是 {target}")
-                    s.remove(scope=Scope.USER, key="guess_game")
+                    await s.remove(scope=Scope.USER, key="guess_game")
                     break
                 
                 # 验证输入
@@ -75,9 +75,9 @@ async def guess_number_game(msg: Model.GuildMessage | Model.GroupMessage | Model
                     continue
                 
                 # 更新尝试次数
-                session = s.get(Scope.USER, "guess_game")
+                session = await s.get(Scope.USER, "guess_game")
                 attempts = session.data["attempts"] + 1
-                s.update(Scope.USER, "guess_game", {"attempts": attempts})
+                await s.update(Scope.USER, "guess_game", {"attempts": attempts})
                 
                 # 判断结果
                 if guess == target:
@@ -86,7 +86,7 @@ async def guess_number_game(msg: Model.GuildMessage | Model.GroupMessage | Model
                         f"答案就是 {target}\n"
                         f"你用了 {attempts} 次猜中"
                     )
-                    s.remove(scope=Scope.USER, key="guess_game")
+                    await s.remove(scope=Scope.USER, key="guess_game")
                     break
                 elif attempts >= max_attempts:
                     await msg.reply(
@@ -94,7 +94,7 @@ async def guess_number_game(msg: Model.GuildMessage | Model.GroupMessage | Model
                         f"你已经用完了 {max_attempts} 次机会\n"
                         f"正确答案是 {target}"
                     )
-                    s.remove(scope=Scope.USER, key="guess_game")
+                    await s.remove(scope=Scope.USER, key="guess_game")
                     break
                 elif guess < target:
                     remaining = max_attempts - attempts
@@ -105,14 +105,14 @@ async def guess_number_game(msg: Model.GuildMessage | Model.GroupMessage | Model
             
             except WaitTimeoutError:
                 await msg.reply(f"⏰ 等待超时！答案是 {target}")
-                s.remove(scope=Scope.USER, key="guess_game")
+                await s.remove(scope=Scope.USER, key="guess_game")
                 break
 
 @bot.on_command(command="继续", valid_scenes=CommandValidScenes.ALL)
 async def continue_game(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     """继续未完成的游戏"""
     with bot.session.bind(msg) as s:
-        session = s.get(Scope.USER, "guess_game")
+        session = await s.get(Scope.USER, "guess_game")
         
         if not session or not session.data.get("is_active"):
             await msg.reply("没有进行中的游戏，发送「猜数字」开始新游戏")

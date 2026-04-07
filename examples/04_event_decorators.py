@@ -56,46 +56,46 @@ def main() -> None:
     # ==================== 4.2 成员事件 ====================
 
     @bot.on_guild_member_add
-    async def on_member_add(msg) -> None:
+    async def on_member_add(msg: Model.MemberWithGuildID) -> None:
         """成员加入频道"""
         bot.logger.info(f"[成员加入] {msg.user.username} 加入了频道")
 
     @bot.on_guild_member_remove
-    async def on_member_remove(msg) -> None:
+    async def on_member_remove(msg: Model.MemberWithGuildID) -> None:
         """成员退出频道"""
         bot.logger.info(f"[成员退出] {msg.user.username} 退出了频道")
 
     @bot.on_guild_member_update
-    async def on_member_update(msg) -> None:
+    async def on_member_update(msg: Model.MemberWithGuildID) -> None:
         """成员信息更新"""
         bot.logger.info(f"[成员更新] {msg.user.username} 信息已更新")
 
     # ==================== 4.3 频道生命周期事件 ====================
 
     @bot.on_guild_create
-    async def on_guild_create(msg) -> None:
+    async def on_guild_create(msg: Model.Guild) -> None:
         """机器人加入频道"""
         bot.logger.info(f"[加入频道] 机器人加入了频道：{msg.name}")
 
     @bot.on_guild_delete
-    async def on_guild_delete(msg) -> None:
+    async def on_guild_delete(msg: Model.Guild) -> None:
         """机器人退出频道"""
         bot.logger.info(f"[退出频道] 机器人退出了频道：{msg.id}")
 
     @bot.on_channel_create
-    async def on_channel_create(msg) -> None:
+    async def on_channel_create(msg: Model.Channel) -> None:
         """子频道创建"""
         bot.logger.info(f"[子频道创建] {msg.name}")
 
     @bot.on_channel_delete
-    async def on_channel_delete(msg) -> None:
+    async def on_channel_delete(msg: Model.Channel) -> None:
         """子频道删除"""
         bot.logger.info(f"[子频道删除] {msg.id}")
 
     # ==================== 4.4 群聊生命周期事件 ====================
 
     @bot.on_group_add
-    async def on_group_add(msg) -> None:
+    async def on_group_add(msg: Model.GroupEvent) -> None:
         """机器人被加入群聊"""
         bot.logger.info(f"[加入群聊] 机器人被加入群聊：{msg.group_openid}")
         # 可以发送欢迎消息
@@ -105,55 +105,55 @@ def main() -> None:
         # )
 
     @bot.on_group_delete
-    async def on_group_delete(msg) -> None:
+    async def on_group_delete(msg: Model.GroupEvent) -> None:
         """机器人被移出群聊"""
         bot.logger.info(f"[移出群聊] 机器人被移出群聊：{msg.group_openid}")
 
     @bot.on_friend_add
-    async def on_friend_add(msg) -> None:
+    async def on_friend_add(msg: Model.FriendEvent) -> None:
         """添加好友"""
-        bot.logger.info(f"[添加好友] {msg.user_openid}")
+        bot.logger.info(f"[添加好友] {msg.openid}")
 
     @bot.on_friend_delete
-    async def on_friend_delete(msg) -> None:
+    async def on_friend_delete(msg: Model.FriendEvent) -> None:
         """删除好友"""
-        bot.logger.info(f"[删除好友] {msg.user_openid}")
+        bot.logger.info(f"[删除好友] {msg.openid}")
 
     # ==================== 4.5 互动事件 ====================
 
     @bot.on_interaction
-    async def on_interaction(msg) -> None:
+    async def on_interaction(msg: Model.Interaction) -> None:
         """互动按钮点击事件"""
         bot.logger.info(f"[按钮点击] {msg.data}")
         # 回应互动事件
         await bot.api.respond_interaction(interaction_id=msg.id, code=0)
 
     @bot.on_reaction_add
-    async def on_reaction_add(msg) -> None:
+    async def on_reaction_add(msg: Model.MessageReaction) -> None:
         """表情表态添加"""
         bot.logger.info(f"[表情添加] {msg.emoji.name}")
 
     @bot.on_reaction_remove
-    async def on_reaction_remove(msg) -> None:
+    async def on_reaction_remove(msg: Model.MessageReaction) -> None:
         """表情表态移除"""
         bot.logger.info(f"[表情移除] {msg.emoji.name}")
 
     # ==================== 4.6 消息删除事件 ====================
 
     @bot.on_public_message_delete
-    async def on_public_message_delete(msg) -> None:
+    async def on_public_message_delete(msg: Model.MessageDelete) -> None:
         """公域消息删除"""
         bot.logger.info(f"[消息删除] 消息ID：{msg.message.id}")
 
     @bot.on_direct_message_delete
-    async def on_direct_message_delete(msg) -> None:
+    async def on_direct_message_delete(msg: Model.MessageDelete) -> None:
         """私信消息删除"""
         bot.logger.info(f"[私信删除] 消息ID：{msg.message.id}")
 
     # ==================== 4.7 批量订阅事件 ====================
 
     @bot.on_default_public_events
-    async def on_default_public(event) -> None:
+    async def on_default_public(event: Model.BaseModel) -> None:
         """
         订阅公域机器人默认事件集合
         包含：GUILDS、PUBLIC_GUILD_MESSAGES、GROUP_AND_C2C_EVENT、OPEN_FORUM_EVENT
@@ -161,7 +161,7 @@ def main() -> None:
         bot.logger.info(f"[默认公域事件] {event.event_type}")
 
     @bot.on_all_intent_events
-    async def on_all_events(event) -> None:
+    async def on_all_events(event: Model.BaseModel) -> None:
         """
         订阅所有事件
         注意：部分事件需要私域权限才能接收

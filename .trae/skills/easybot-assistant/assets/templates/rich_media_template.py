@@ -84,7 +84,7 @@ async def send_keyboard(
                     "buttons": [
                         {
                             "render_data": {"label": "🔗 访问官网", "style": 2},
-                            "action": {"type": 2, "data": "https://example.com"},
+                            "action": {"type": 0, "data": "https://example.com"},
                         }
                     ]
                 },
@@ -95,19 +95,18 @@ async def send_keyboard(
 
 
 @bot.on_interaction
-async def handle_interaction(msg: Model.Interaction):
-    button_data = msg.data.resolved.button_data
+async def handle_interaction(msg: Model.Interaction) -> None:
+    resolved = msg.data.resolved if msg.data and msg.data.resolved else None
+    if not resolved:
+        return
+    button_data = resolved.button_data
 
     await bot.api.respond_interaction(interaction_id=msg.id, code=0)
 
     if button_data == "action:confirm":
-        await bot.api.send_c2c_message(
-            openid=msg.user_openid, content="✅ 您点击了确认按钮", event_id=msg.id
-        )
+        await msg.reply("✅ 您点击了确认按钮")
     elif button_data == "action:cancel":
-        await bot.api.send_c2c_message(
-            openid=msg.user_openid, content="❌ 您点击了取消按钮", event_id=msg.id
-        )
+        await msg.reply("❌ 您点击了取消按钮")
 
 
 if __name__ == "__main__":

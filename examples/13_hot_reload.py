@@ -11,13 +11,11 @@ EasyBot SDK 示例 13：插件热重载功能
 运行前请将 app_id 和 app_secret 替换为你的机器人凭证
 """
 
-from pathlib import Path
-
-from easybot import Bot, BotAdminManager, Model
+from easybot import Bot, CommandValidScenes, Model
 
 
-def main():
-    bot = Bot(
+def main() -> None:
+    bot: Bot = Bot(
         app_id="your_app_id",
         app_secret="your_app_secret",
         auto_load_plugins=True,
@@ -25,11 +23,9 @@ def main():
         plugins_recursive=True,
     )
 
-    admin_mgr = BotAdminManager()
-    admin_mgr.bot_admins = ["your_admin_id"]
-
     @bot.on_startup
-    async def on_startup(event):
+    async def on_startup(event: Model.StartupEvent) -> None:
+        await bot.bot_admin_manager.set_bot_admins(["your_admin_id"])
         bot.logger.info("机器人启动成功！")
         plugins = bot.get_loaded_plugins()
         bot.logger.info(f"已加载 {len(plugins)} 个插件: {plugins}")
@@ -38,6 +34,7 @@ def main():
         command="/热重载",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def reload_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """热重载指定插件（自动识别插件名或命令名）"""
@@ -68,6 +65,7 @@ def main():
         command="/插件列表",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def list_plugins_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """列出所有已加载的插件"""
@@ -91,6 +89,7 @@ def main():
         command="/命令列表",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def list_commands_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """列出所有命令"""
@@ -113,6 +112,7 @@ def main():
         command="/启用",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def enable_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """启用指定命令（支持函数名或命令名）"""
@@ -133,6 +133,7 @@ def main():
         command="/禁用",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def disable_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """禁用指定命令（支持函数名或命令名）"""
@@ -153,6 +154,7 @@ def main():
         command="/卸载插件",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def unload_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """卸载指定插件"""
@@ -172,6 +174,7 @@ def main():
         command="/重载全部",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def reload_all_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """热重载所有插件"""
@@ -184,6 +187,7 @@ def main():
         command="/查找命令",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def find_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """查找指定命令"""
@@ -207,6 +211,7 @@ def main():
         command="/命令状态",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def status_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """检查命令是否启用"""
@@ -228,6 +233,7 @@ def main():
         command="/移除命令",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def remove_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """移除指定命令"""
@@ -246,6 +252,7 @@ def main():
         command="/清空插件",
         is_require_bot_admin=True,
         bot_admin_error_msg="此命令仅机器人管理员可用",
+        valid_scenes=CommandValidScenes.GROUP | CommandValidScenes.C2C,
     )
     async def clear_cmd(msg: Model.GroupMessage | Model.C2CMessage):
         """清空所有插件"""

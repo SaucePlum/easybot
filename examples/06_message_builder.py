@@ -135,54 +135,14 @@ def main():
         # ==================== 6.6 Markdown 消息 ====================
 
         elif msg.treated_msg == "markdown":
-            md_native = MessagesModel.MessageMarkdown(
-                content="""# 标题
-## 副标题
+            md_native = MessagesModel.MessageMarkdown(content="""# Markdown 消息示例
 
-正文内容
+支持 **粗体**、*斜体*、`代码块` 和引用回复。
 
-**粗体文字**
-*斜体文字*
+## 引用回复
 
-- 列表项1
-- 列表项2
-- 列表项3
-
-[链接文本](https://example.com)
-""",
-                keyboard_content={
-                    "rows": [
-                        {
-                            "buttons": [
-                                {
-                                    "render_data": {
-                                        "label": "菜单",
-                                        "visited_label": "菜单",
-                                    },
-                                    "action": {
-                                        "type": 2,
-                                        "permission": {
-                                            "type": 2,
-                                        },
-                                        "data": "菜单",
-                                    },
-                                },
-                                {
-                                    "render_data": {
-                                        "label": "帮助",
-                                        "visited_label": "帮助",
-                                    },
-                                    "action": {
-                                        "type": 2,
-                                        "permission": {"type": 2},
-                                        "data": "帮助",
-                                    },
-                                },
-                            ]
-                        },
-                    ],
-                },
-            )
+使用 `reference=True` 参数可以引用原消息：
+""")
             await msg.reply(md_native)
 
         elif msg.treated_msg == "md模板":

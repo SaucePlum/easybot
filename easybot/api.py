@@ -261,6 +261,8 @@ class API:
         event_id: str | None = None,
         msg_type: str | None = None,
         msg_seq: int | None = None,
+        message_reference_id: str | None = None,
+        ignore_message_reference_error: bool = False,
         response_model: type = Model.GuildMessage,
         require_content: bool = False,
         **kwargs,
@@ -277,6 +279,8 @@ class API:
             event_id: 要回复的事件 ID（被动消息）
             msg_type: 消息类型（群聊/单聊需要）
             msg_seq: 回复消息的序号（群聊/单聊需要）
+            message_reference_id: 引用消息 ID（引用回复）
+            ignore_message_reference_error: 是否忽略引用消息错误
             response_model: 响应模型类
             require_content: 是否要求必须有文本内容（群聊需要）
             **kwargs: 其他参数
@@ -291,10 +295,23 @@ class API:
                 raise ValueError("content、image 和 file_image 至少需要提供一个")
             if content is not None:
                 content = MessagesModel.Message(
-                    content=content, image=image, file_image=file_image
+                    content=content,
+                    image=image,
+                    file_image=file_image,
+                    message_reference_id=message_reference_id,
+                    ignore_message_reference_error=ignore_message_reference_error,
                 )
             else:
-                content = MessagesModel.Message(image=image, file_image=file_image)
+                content = MessagesModel.Message(
+                    image=image,
+                    file_image=file_image,
+                    message_reference_id=message_reference_id,
+                    ignore_message_reference_error=ignore_message_reference_error,
+                )
+        elif message_reference_id:
+            if hasattr(content, "_message_reference_id"):
+                content._message_reference_id = message_reference_id
+                content._ignore_message_reference_error = ignore_message_reference_error
 
         payload = content.build()
 
@@ -303,7 +320,6 @@ class API:
                 "群聊消息必须有文本内容(content)，纯图片/富媒体请配合文本使用"
             )
 
-        # 添加通用参数
         if msg_id:
             payload["msg_id"] = msg_id
         if event_id:
@@ -313,7 +329,6 @@ class API:
         if msg_seq is not None:
             payload["msg_seq"] = msg_seq
 
-        # 添加额外参数
         payload.update(kwargs)
 
         self._logger.debug(
@@ -348,6 +363,8 @@ class API:
         file_image: bytes | str | None = None,
         msg_id: str | None = None,
         event_id: str | None = None,
+        message_reference_id: str | None = None,
+        ignore_message_reference_error: bool = False,
     ) -> Model.GuildMessage:
         """
         发送频道消息
@@ -368,6 +385,8 @@ class API:
             file_image: 图片数据，支持 bytes 或文件路径（当 content 为文本时使用）
             msg_id: 要回复的消息 ID（被动消息）
             event_id: 要回复的事件 ID（被动消息）
+            message_reference_id: 引用消息 ID（引用回复）
+            ignore_message_reference_error: 是否忽略引用消息错误
 
         Returns:
             Model.GuildMessage: 发送的消息对象
@@ -382,6 +401,9 @@ class API:
             await api.send_guild_message(channel_id, "Hello")
             await api.send_guild_message(channel_id, "图片", image="https://...")
             await api.send_guild_message(channel_id, "图片", file_image="./image.png")
+
+            # 引用回复
+            await api.send_guild_message(channel_id, "回复内容", message_reference_id="引用的消息ID")
         """
         endpoint = f"/channels/{channel_id}/messages"
         return await self._send_message(
@@ -391,6 +413,8 @@ class API:
             file_image=file_image,
             msg_id=msg_id,
             event_id=event_id,
+            message_reference_id=message_reference_id,
+            ignore_message_reference_error=ignore_message_reference_error,
             response_model=Model.GuildMessage,
         )
 
@@ -501,6 +525,7 @@ class API:
         event_id: str | None = None,
         msg_id: str | None = None,
         msg_seq: int | None = None,
+        message_reference_id: str | None = None,
     ) -> Model.GroupSendMessageResponse:
         """
         发送群聊消息
@@ -520,6 +545,7 @@ class API:
             event_id: 前置收到的事件 ID（被动消息）
             msg_id: 要回复的消息 ID（被动消息）
             msg_seq: 回复消息的序号
+            message_reference_id: 引用消息 ID（引用回复）
 
         Returns:
             Model.GroupSendMessageResponse: 发送的消息响应
@@ -533,6 +559,9 @@ class API:
 
             # Embed 消息
             await api.send_group_message(group_openid, MessagesModel.MessageEmbed(title="标题"))
+
+            # 引用回复
+            await api.send_group_message(group_openid, "回复内容", message_reference_id="引用的消息ID")
         """
         endpoint = f"/v2/groups/{group_openid}/messages"
         return await self._send_message(
@@ -541,6 +570,7 @@ class API:
             msg_id=msg_id,
             event_id=event_id,
             msg_seq=msg_seq,
+            message_reference_id=message_reference_id,
             msg_type=(
                 getattr(content, "msg_type", None)
                 if content and not isinstance(content, str)
@@ -577,6 +607,7 @@ class API:
         event_id: str | None = None,
         msg_id: str | None = None,
         msg_seq: int | None = None,
+        message_reference_id: str | None = None,
     ) -> Model.C2CSendMessageResponse:
         """
         发送单聊消息
@@ -596,6 +627,7 @@ class API:
             event_id: 前置收到的事件 ID（被动消息）
             msg_id: 要回复的消息 ID（被动消息）
             msg_seq: 回复消息的序号
+            message_reference_id: 引用消息 ID（引用回复）
 
         Returns:
             Model.C2CSendMessageResponse: 发送的消息响应
@@ -609,6 +641,9 @@ class API:
 
             # Embed 消息
             await api.send_c2c_message(openid, MessagesModel.MessageEmbed(title="标题"))
+
+            # 引用回复
+            await api.send_c2c_message(openid, "回复内容", message_reference_id="引用的消息ID")
         """
         endpoint = f"/v2/users/{openid}/messages"
         return await self._send_message(
@@ -617,6 +652,7 @@ class API:
             msg_id=msg_id,
             event_id=event_id,
             msg_seq=msg_seq,
+            message_reference_id=message_reference_id,
             msg_type=(
                 getattr(content, "msg_type", None)
                 if content and not isinstance(content, str)
@@ -673,6 +709,8 @@ class API:
         file_image: bytes | str | None = None,
         msg_id: str | None = None,
         event_id: str | None = None,
+        message_reference_id: str | None = None,
+        ignore_message_reference_error: bool = False,
     ) -> Model.GuildMessage:
         """
         发送频道私信消息
@@ -693,6 +731,8 @@ class API:
             file_image: 图片数据，支持 bytes 或文件路径（当 content 为文本时使用）
             msg_id: 要回复的消息 ID（被动消息）
             event_id: 要回复的事件 ID（被动消息）
+            message_reference_id: 引用消息 ID（引用回复，对象格式）
+            ignore_message_reference_error: 是否忽略引用消息错误
 
         Returns:
             Model.GuildMessage: 发送的消息对象
@@ -705,6 +745,9 @@ class API:
             # 方式二：文本+参数
             await api.send_direct_message(guild_id, "Hello")
             await api.send_direct_message(guild_id, "图片", image="https://...")
+
+            # 引用回复
+            await api.send_direct_message(guild_id, "回复内容", message_reference_id="引用的消息ID")
         """
         endpoint = f"/dms/{guild_id}/messages"
         return await self._send_message(
@@ -714,6 +757,8 @@ class API:
             file_image=file_image,
             msg_id=msg_id,
             event_id=event_id,
+            message_reference_id=message_reference_id,
+            ignore_message_reference_error=ignore_message_reference_error,
             response_model=Model.GuildMessage,
         )
 

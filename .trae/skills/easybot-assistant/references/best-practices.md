@@ -41,9 +41,6 @@ my_bot/
 ```python
 # config.py
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 APP_ID = os.getenv("EASYBOT_APP_ID")
 APP_SECRET = os.getenv("EASYBOT_APP_SECRET")
@@ -72,7 +69,9 @@ async def handle_guild(msg: Model.GuildMessage) -> None:
     await msg.reply("收到")
 
 @bot.on_command(command="test")
-async def test_cmd(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage) -> None:
+async def test_cmd(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     result: Optional[str] = process_message(msg.treated_msg)
     if result:
         await msg.reply(result)
@@ -138,6 +137,7 @@ async def handle(msg: Model.GuildMessage) -> None:
 
 ```python
 from easybot import (
+    Model,
     EasyBotException,
     APIError,
     AuthenticationError,
@@ -149,7 +149,9 @@ from easybot import (
 )
 
 @bot.on_command(command="test")
-async def test_cmd(msg):
+async def test_cmd(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     try:
         result = await bot.api.get_guild("invalid_id")
         await msg.reply(f"结果: {result}")
@@ -168,9 +170,12 @@ async def test_cmd(msg):
         bot.logger.error(f"API 错误: {e}")
         await msg.reply(f"API 调用失败: {e}")
     
+    except EasyBotException as e:
+        bot.logger.error(f"SDK 异常: {e}")
+        await msg.reply("发生错误，请稍后再试")
     except Exception as e:
-        bot.logger.exception(f"未知错误: {e}")
-        await msg.reply("发生未知错误")
+        bot.logger.exception(f"未预期异常: {e}")
+        await msg.reply("发生未预期的错误")
 ```
 
 ### wait_for 错误处理
@@ -179,7 +184,9 @@ async def test_cmd(msg):
 from easybot import Scope, WaitTimeoutError, WaitError
 
 @bot.on_command(command="游戏")
-async def game(msg):
+async def game(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     with bot.session.bind(msg) as s:
         await msg.reply("请在30秒内回复")
         
@@ -278,14 +285,13 @@ async def broadcast_messages(channel_ids: list[str], content: str):
 
 ```python
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 import time
 
 # 内存缓存
-cache: dict[str, tuple[float, any]] = {}
+cache: dict[str, tuple[float, Any]] = {}
 
-def get_cached(key: str, ttl: int = 300) -> Optional[any]:
-    """获取缓存值"""
+def get_cached(key: str, ttl: int = 300) -> Any | None:
     if key in cache:
         expire_time, value = cache[key]
         if time.time() < expire_time:
@@ -293,8 +299,7 @@ def get_cached(key: str, ttl: int = 300) -> Optional[any]:
         del cache[key]
     return None
 
-def set_cached(key: str, value: any, ttl: int = 300) -> None:
-    """设置缓存值"""
+def set_cached(key: str, value: Any, ttl: int = 300) -> None:
     cache[key] = (time.time() + ttl, value)
 
 # 使用 LRU 缓存
@@ -332,28 +337,23 @@ async def get_all_members(guild_id: str) -> list:
 ### 资源管理
 
 ```python
-# 使用上下文管理器
-async def process_file(file_path: str):
-    async with aiofiles.open(file_path, 'rb') as f:
-        data = await f.read()
-    # 文件自动关闭
+import asyncio
+from pathlib import Path
 
-# 连接池管理
-class HttpClientPool:
-    _instance = None
-    _client = None
-    
-    @classmethod
-    async def get_client(cls):
-        if cls._client is None:
-            cls._client = aiohttp.ClientSession()
-        return cls._client
-    
-    @classmethod
-    async def close(cls):
-        if cls._client:
-            await cls._client.close()
-            cls._client = None
+async def read_file_bytes(file_path: str) -> bytes:
+    path = Path(file_path)
+    return await asyncio.to_thread(path.read_bytes)
+
+@bot.on_command(command="读取文件", valid_scenes=CommandValidScenes.ALL)
+async def read_file_cmd(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
+    file_path = msg.treated_msg.replace("读取文件", "").strip()
+    if not file_path:
+        await msg.reply("请提供文件路径")
+        return
+    data = await read_file_bytes(file_path)
+    await msg.reply(f"读取完成，大小: {len(data)} bytes")
 ```
 
 ---
@@ -392,6 +392,7 @@ bot.logger.info(f"用户输入: {sanitize_for_log(user_input)}")
 ```python
 import re
 from typing import Optional
+from easybot import Model
 
 def validate_user_input(text: str, max_length: int = 500) -> Optional[str]:
     """验证并清理用户输入"""
@@ -414,7 +415,9 @@ def validate_user_input(text: str, max_length: int = 500) -> Optional[str]:
     return text
 
 @bot.on_command(command="提交")
-async def submit(msg):
+async def submit(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     cleaned = validate_user_input(msg.treated_msg)
     if not cleaned:
         await msg.reply("输入无效")
@@ -427,7 +430,7 @@ async def submit(msg):
 ### 权限检查
 
 ```python
-from easybot import CommandValidScenes
+from easybot import CommandValidScenes, Model
 
 # 命令级别权限
 @bot.on_command(
@@ -435,11 +438,14 @@ from easybot import CommandValidScenes
     is_require_admin=True,
     admin_error_msg="此命令仅频道管理员可用"
 )
-async def admin_cmd(msg):
+async def admin_cmd(msg: Model.GuildMessage) -> None:
     await msg.reply("管理员命令")
 
 # 自定义权限检查
-async def check_permission(msg, required_level: int) -> bool:
+async def check_permission(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+    required_level: int,
+) -> bool:
     """检查用户权限等级"""
     user_id = msg.author.id if hasattr(msg.author, 'id') else msg.author.user_openid
     
@@ -449,7 +455,9 @@ async def check_permission(msg, required_level: int) -> bool:
     return user_level >= required_level
 
 @bot.on_command(command="高级功能")
-async def advanced_cmd(msg):
+async def advanced_cmd(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     if not await check_permission(msg, required_level=5):
         await msg.reply("权限不足")
         return
@@ -460,6 +468,7 @@ async def advanced_cmd(msg):
 ### 防止滥用
 
 ```python
+from easybot import CommandValidScenes, StopProcessing
 from collections import defaultdict
 import time
 
@@ -483,7 +492,9 @@ def check_rate_limit(user_id: str) -> bool:
     return True
 
 @bot.before_command(valid_scenes=CommandValidScenes.ALL)
-async def rate_limit_check(msg):
+async def rate_limit_check(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     user_id = msg.author.id if hasattr(msg.author, 'id') else msg.author.user_openid
     
     if not check_rate_limit(user_id):

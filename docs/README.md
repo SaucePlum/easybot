@@ -69,15 +69,57 @@ pip install -r requirements.txt
 ::: details 点击查看完整示例
 
 ```python
-from easybot import Bot
+from easybot import Bot, Model
 
 bot = Bot(app_id="你的AppID", app_secret="你的AppSecret")
 
 @bot.on_guild_message
-async def on_message(msg):
+async def on_message(msg: Model.GuildMessage) -> None:
     await msg.reply("Hello World!")
 
 bot.start()
+```
+
+:::
+
+::: tip 提示
+公域机器人只会收到频道内 @它 的消息；请在频道中 @机器人进行测试。
+:::
+
+::: details 推荐：加入最小错误处理
+
+```python
+from easybot import Bot, Model, APIError, NetworkError, RateLimitError
+
+bot = Bot(app_id="你的AppID", app_secret="你的AppSecret")
+
+@bot.on_guild_message
+async def on_message(msg: Model.GuildMessage) -> None:
+    try:
+        await msg.reply(f"你说：{msg.treated_msg}")
+    except RateLimitError as e:
+        bot.logger.warning(f"触发频率限制：{e}")
+    except (APIError, NetworkError) as e:
+        bot.logger.error(f"回复失败：{e}")
+
+bot.start()
+```
+
+:::
+
+::: details 异步启动（自行管理事件循环）
+
+```python
+import asyncio
+from easybot import Bot, Model
+
+bot = Bot(app_id="你的AppID", app_secret="你的AppSecret")
+
+@bot.on_guild_message
+async def on_message(msg: Model.GuildMessage) -> None:
+    await msg.reply("Hello World!")
+
+asyncio.run(bot.start_async())
 ```
 
 :::

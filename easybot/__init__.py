@@ -5,7 +5,6 @@ EasyBot SDK - 轻量级 QQ 机器人 SDK
 专注于简洁、容易上手且稳定的 QQ 官方机器人 SDK，面向初级开发者。
 """
 
-from ._internal.lifecycle import ShutdownEvent, StartupEvent, TimerEvent
 from .api import API
 from .bot import Bot
 from .builders import Builders, MessagesModel
@@ -18,20 +17,15 @@ from .exceptions import (
     RateLimitError,
     StopProcessing,
     ValidationError,
+    WaitError,
+    WaitTimeoutError,
 )
 from .logger import Logger
 from .models import Model
 from .plugins import BotAdminManager, BotCommandObject, CommandValidScenes, Plugins
 from .protocol import Proto
 from .sandbox import SandBox
-from .session import (
-    BoundSession,
-    Scope,
-    SessionManager,
-    WaitError,
-    WaitTimeoutError,
-    with_session,
-)
+from .session import BoundSession, Scope, SessionManager, with_session
 from .version import __version__
 
 __all__ = [
@@ -50,9 +44,6 @@ __all__ = [
     "RateLimitError",
     "NetworkError",
     "ValidationError",
-    "StartupEvent",
-    "ShutdownEvent",
-    "TimerEvent",
     "CommandValidScenes",
     "BotAdminManager",
     "BotCommandObject",

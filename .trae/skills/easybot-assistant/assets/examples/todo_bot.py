@@ -8,6 +8,7 @@
 2. python todo_bot.py
 """
 
+import asyncio
 import json
 import os
 from datetime import datetime
@@ -23,17 +24,23 @@ bot = Bot(
 DATA_FILE = "sdk_data/todos.json"
 
 
-def load_todos() -> dict:
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+async def load_todos() -> dict:
+    def _sync_read() -> dict:
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {}
+
+    return await asyncio.to_thread(_sync_read)
 
 
-def save_todos(todos: dict) -> None:
-    os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(todos, f, ensure_ascii=False, indent=2)
+async def save_todos(todos: dict) -> None:
+    def _sync_write() -> None:
+        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(todos, f, ensure_ascii=False, indent=2)
+
+    await asyncio.to_thread(_sync_write)
 
 
 def get_user_key(
@@ -82,7 +89,7 @@ async def add_todo(
         return
 
     user_key = get_user_key(msg)
-    todos = load_todos()
+    todos = await load_todos()
 
     if user_key not in todos:
         todos[user_key] = []
@@ -98,7 +105,7 @@ async def add_todo(
         }
     )
 
-    save_todos(todos)
+    await save_todos(todos)
     await msg.reply(f"✅ 已添加待办：{content}")
 
 
@@ -109,7 +116,7 @@ async def list_todos(
     ),
 ):
     user_key = get_user_key(msg)
-    todos = load_todos()
+    todos = await load_todos()
 
     if user_key not in todos or not todos[user_key]:
         await msg.reply("📭 暂无待办事项")
@@ -140,7 +147,7 @@ async def complete_todo(
         return
 
     user_key = get_user_key(msg)
-    todos = load_todos()
+    todos = await load_todos()
 
     if user_key not in todos:
         await msg.reply("📭 暂无待办事项")
@@ -149,7 +156,7 @@ async def complete_todo(
     for todo in todos[user_key]:
         if todo["id"] == todo_id:
             todo["done"] = True
-            save_todos(todos)
+            await save_todos(todos)
             await msg.reply(f"✅ 已完成：{todo['content']}")
             return
 
@@ -169,7 +176,7 @@ async def delete_todo(
         return
 
     user_key = get_user_key(msg)
-    todos = load_todos()
+    todos = await load_todos()
 
     if user_key not in todos:
         await msg.reply("📭 暂无待办事项")
@@ -178,7 +185,7 @@ async def delete_todo(
     for i, todo in enumerate(todos[user_key]):
         if todo["id"] == todo_id:
             deleted = todos[user_key].pop(i)
-            save_todos(todos)
+            await save_todos(todos)
             await msg.reply(f"🗑️ 已删除：{deleted['content']}")
             return
 
@@ -198,12 +205,12 @@ async def clear_todos(
             await s.wait_for(scopes=Scope.USER, command="确认", timeout=30)
 
             user_key = get_user_key(msg)
-            todos = load_todos()
+            todos = await load_todos()
 
             if user_key in todos:
                 count = len(todos[user_key])
                 todos[user_key] = []
-                save_todos(todos)
+                await save_todos(todos)
                 await msg.reply(f"🗑️ 已清空 {count} 条待办")
             else:
                 await msg.reply("📭 暂无待办事项")
@@ -219,7 +226,7 @@ async def todo_stats(
     ),
 ):
     user_key = get_user_key(msg)
-    todos = load_todos()
+    todos = await load_todos()
 
     if user_key not in todos or not todos[user_key]:
         await msg.reply("📭 暂无待办事项")

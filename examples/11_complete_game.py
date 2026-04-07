@@ -23,11 +23,11 @@ from random import randint
 from re import compile as re_compile
 from time import time
 
-from easybot import Bot, CommandValidScenes, Model, Scope, with_session
+from easybot import Bot, BoundSession, CommandValidScenes, Model, Scope, with_session
 
 
-def main():
-    bot = Bot(
+def main() -> None:
+    bot: Bot = Bot(
         app_id="your_app_id",
         app_secret="your_app_secret",
         is_debug=True,
@@ -36,13 +36,11 @@ def main():
     # ==================== 开始游戏 ====================
     @bot.on_command(command="猜数字", valid_scenes=CommandValidScenes.C2C)
     @with_session
-    async def start_game(msg: Model.C2CMessage, session=None):
+    async def start_game(msg: Model.C2CMessage, session: BoundSession) -> None:
         """开始猜数字游戏"""
-        # 生成 1-100 的随机数
         number = randint(1, 100)
 
-        # 创建游戏会话
-        session.new(
+        await session.new(
             scope=Scope.USER,
             key="number_game",
             data={
@@ -63,40 +61,32 @@ def main():
             "请输入你的猜测（输入 0 结束游戏）："
         )
 
-    # ==================== 处理猜测 ====================
     @bot.on_command(regex=re_compile(r"^(\d+)$"), valid_scenes=CommandValidScenes.C2C)
     @with_session
-    async def guess_number(msg: Model.C2CMessage, session=None):
+    async def guess_number(msg: Model.C2CMessage, session: BoundSession) -> None:
         """处理用户的猜测"""
-        # 获取游戏会话
-        game = session.get(Scope.USER, "number_game")
+        game = await session.get(Scope.USER, "number_game")
         if not game or not game.data.get("active"):
-            return  # 没有进行中的游戏，不处理
+            return
 
         guess = int(msg.treated_msg[0])
         data = game.data
         target = data["number"]
 
-        # 结束游戏指令
         if guess == 0:
-            session.remove(Scope.USER, key="number_game")
+            await session.remove(Scope.USER, key="number_game")
             await msg.reply(f"🛑 游戏已结束，答案是 {target}")
             return
 
-        # 验证输入范围
         if guess < 1 or guess > 100:
             await msg.reply("❌ 请输入 1-100 之间的数字")
             return
 
-        # 增加猜测次数
         data["attempts"] += 1
 
-        # 判断猜测结果
         if guess == target:
-            # 猜对了！
             attempts = data["attempts"]
 
-            # 根据猜测次数给出评价
             if attempts <= 5:
                 rating = "🏆 太厉害了！"
             elif attempts <= 10:
@@ -111,13 +101,11 @@ def main():
                 f"发送「猜数字」开始新游戏"
             )
 
-            # 清除游戏会话
-            session.remove(Scope.USER, key="number_game")
+            await session.remove(Scope.USER, key="number_game")
 
         elif guess < target:
-            # 猜小了
             data["min"] = max(data["min"], guess + 1)
-            session.update(Scope.USER, "number_game", data)
+            await session.update(Scope.USER, "number_game", data)
 
             await msg.reply(
                 f"📈 猜小了！\n"
@@ -126,9 +114,8 @@ def main():
             )
 
         else:
-            # 猜大了
             data["max"] = min(data["max"], guess - 1)
-            session.update(Scope.USER, "number_game", data)
+            await session.update(Scope.USER, "number_game", data)
 
             await msg.reply(
                 f"📉 猜大了！\n"
@@ -136,16 +123,15 @@ def main():
                 f"📝 已猜 {data['attempts']} 次"
             )
 
-    # ==================== 结束游戏 ====================
     @bot.on_command(command="结束游戏", valid_scenes=CommandValidScenes.C2C)
     @with_session
-    async def end_game(msg: Model.C2CMessage, session=None):
+    async def end_game(msg: Model.C2CMessage, session: BoundSession) -> None:
         """主动结束游戏"""
-        game = session.get(Scope.USER, "number_game")
+        game = await session.get(Scope.USER, "number_game")
         if game:
             answer = game.data["number"]
             attempts = game.data["attempts"]
-            session.remove(Scope.USER, key="number_game")
+            await session.remove(Scope.USER, key="number_game")
 
             if attempts > 0:
                 await msg.reply(
@@ -156,12 +142,11 @@ def main():
         else:
             await msg.reply("❌ 没有进行中的游戏")
 
-    # ==================== 查看游戏状态 ====================
     @bot.on_command(command="游戏状态", valid_scenes=CommandValidScenes.C2C)
     @with_session
-    async def game_status(msg: Model.C2CMessage, session=None):
+    async def game_status(msg: Model.C2CMessage, session: BoundSession) -> None:
         """查看当前游戏状态"""
-        game = session.get(Scope.USER, "number_game")
+        game = await session.get(Scope.USER, "number_game")
         if game and game.data.get("active"):
             data = game.data
             elapsed = int(time() - data.get("start_time", time()))

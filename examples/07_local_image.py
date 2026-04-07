@@ -113,13 +113,11 @@ def main():
                 bot.logger.info(f"上传成功，file_info: {result.file_info}")
 
                 # 步骤2：发送消息引用媒体
-                await bot.api.send_group_message(
-                    group_openid=msg.group_openid,
-                    content=MessagesModel.Message(
+                await msg.reply(
+                    MessagesModel.Message(
                         content="群聊图片（本地文件）",
-                        media_file_info=result.file_info,  # 使用上传返回的 file_info
-                    ),
-                    msg_id=msg.id,
+                        media_file_info=result.file_info,
+                    )
                 )
 
             except FileNotFoundError:
@@ -141,12 +139,11 @@ def main():
                 bot.logger.info(f"上传成功，file_info: {result.file_info}")
 
                 # 步骤2：发送消息引用媒体
-                await bot.api.send_group_message(
-                    group_openid=msg.group_openid,
-                    content=MessagesModel.Message(
-                        content="群聊图片（网络URL）", media_file_info=result.file_info
-                    ),
-                    msg_id=msg.id,
+                await msg.reply(
+                    MessagesModel.Message(
+                        content="群聊图片（网络URL）",
+                        media_file_info=result.file_info,
+                    )
                 )
 
             except Exception as e:
@@ -170,12 +167,11 @@ def main():
                 bot.logger.info(f"上传成功，file_info: {result.file_info}")
 
                 # 步骤2：发送消息
-                await bot.api.send_group_message(
-                    group_openid=msg.group_openid,
-                    content=MessagesModel.Message(
-                        content="群聊图片（bytes）", media_file_info=result.file_info
-                    ),
-                    msg_id=msg.id,
+                await msg.reply(
+                    MessagesModel.Message(
+                        content="群聊图片（bytes）",
+                        media_file_info=result.file_info,
+                    )
                 )
 
             except Exception as e:
@@ -205,12 +201,11 @@ def main():
                 bot.logger.info(f"上传成功，file_info: {result.file_info}")
 
                 # 步骤2：发送消息引用媒体
-                await bot.api.send_c2c_message(
-                    openid=msg.author.user_openid,
-                    content=MessagesModel.Message(
-                        content="私信图片（本地文件）", media_file_info=result.file_info
-                    ),
-                    msg_id=msg.id,
+                await msg.reply(
+                    MessagesModel.Message(
+                        content="私信图片（本地文件）",
+                        media_file_info=result.file_info,
+                    )
                 )
 
             except FileNotFoundError:
@@ -232,12 +227,11 @@ def main():
                 bot.logger.info(f"上传成功，file_info: {result.file_info}")
 
                 # 步骤2：发送消息引用媒体
-                await bot.api.send_c2c_message(
-                    openid=msg.author.user_openid,
-                    content=MessagesModel.Message(
-                        content="私信图片（网络URL）", media_file_info=result.file_info
-                    ),
-                    msg_id=msg.id,
+                await msg.reply(
+                    MessagesModel.Message(
+                        content="私信图片（网络URL）",
+                        media_file_info=result.file_info,
+                    )
                 )
 
             except Exception as e:
@@ -259,12 +253,11 @@ def main():
                 )
 
                 # 步骤2：发送
-                await bot.api.send_c2c_message(
-                    openid=msg.author.user_openid,
-                    content=MessagesModel.Message(
-                        content="私信图片（bytes）", media_file_info=result.file_info
-                    ),
-                    msg_id=msg.id,
+                await msg.reply(
+                    MessagesModel.Message(
+                        content="私信图片（bytes）",
+                        media_file_info=result.file_info,
+                    )
                 )
 
             except Exception as e:

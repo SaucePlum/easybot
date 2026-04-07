@@ -76,6 +76,25 @@ bot = Bot(
 
 ## 核心概念
 
+### 参数类型提示约束
+
+**所有函数参数都必须使用 SDK 提供的类型进行标注**，包括 `msg`、`session` 等任何参数。禁止使用裸参数名（如 `msg`）而不加类型提示。
+
+正确示例：
+```python
+async def on_guild(msg: Model.GuildMessage): ...
+async def help_cmd(msg: Model.GuildMessage | Model.GroupMessage): ...
+async def form_step(msg: Model.GuildMessage, session: BoundSession): ...
+```
+
+错误示例（会导致 SDK 无法正确识别类型）：
+```python
+async def on_guild(msg): ...           # 缺少类型提示
+async def on_group(msg: Model.GroupMessage | Model.C2CMessage | Model.GuildMessage): ...  # 混入了不存在于 SDK 的联合类型
+```
+
+
+
 ### 1. Bot 实例
 
 Bot 是机器人的核心类，负责连接管理和事件分发：
@@ -94,7 +113,7 @@ bot = Bot(
 
 ### 2. 事件处理器
 
-使用装饰器注册事件处理器，**务必为每个处理器指定正确的类型提示**：
+使用装饰器注册事件处理器，**必须为每个处理器参数添加类型提示**（如 `msg: Model.GuildMessage`），否则 SDK 无法正确识别消息类型，可能导致意外行为：
 
 ```python
 # 频道@机器人消息
@@ -120,9 +139,12 @@ async def on_dm(msg: Model.DirectMessage):
 
 ### 3. 消息模型
 
-所有消息模型继承自 `MessageBase`，提供统一的 `reply()` 方法：
+所有消息模型继承自 `MessageBase`，提供统一的 `reply()` 方法和 `api` 属性：
 
-**推荐使用 `reply()` 方法进行快速回复**，只有在复杂场景（如主动发送消息到其他频道）才需要调用 API：
+**推荐使用 `reply()` 方法进行快速回复**；如需主动调用其他接口，可通过 `msg.api` 或 `bot.api` 访问 API 实例：
+
+- `msg.api`：在消息事件处理器（`@bot.on_xxx`、`@bot.on_command` 等）中可用，两者等价
+- `bot.api`：在任意上下文中可用，包括生命周期事件（`@bot.on_startup`、`@bot.on_shutdown`、`@bot.on_timer` 等）；**在生命周期回调中必须使用 `bot.api`，因为此时没有消息模型**
 
 ```python
 @bot.on_guild_message
@@ -133,16 +155,27 @@ async def handle(msg: Model.GuildMessage):
     msg.treated_msg  # 处理后的内容（去除@等）
     msg.author       # 发送者信息
     msg.timestamp    # 时间戳
-    
+
     # 推荐：使用 reply() 快速回复
     await msg.reply("回复内容")
     await msg.reply("引用回复", reference=True)
-    
-    # 复杂场景：主动发送消息到其他频道
-    await bot.api.send_guild_message(
-        channel_id="其他频道ID",
+
+    # 复杂场景：通过 msg.api 或 bot.api 主动调用接口（两者等价）
+    await msg.api.send_guild_message(
+        channel_id="其他子频道ID",
         content="主动消息"
     )
+    # 或
+    await bot.api.send_guild_message(
+        channel_id="其他子频道ID",
+        content="主动消息"
+    )
+
+# 生命周期回调中必须使用 bot.api（此时没有 msg 对象）
+@bot.on_startup
+async def on_startup(event: Model.StartupEvent):
+    # 机器人启动时主动发送消息
+    await bot.api.send_c2c_message(openid="用户ID", content="机器人已上线")
 ```
 
 ### 4. 命令系统
@@ -220,7 +253,6 @@ from easybot import Scope, WaitTimeoutError, Model
 async def guess_game(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     import random
     target = random.randint(1, 100)
-    
     with bot.session.bind(msg) as s:
         await msg.reply("我想了一个1-100的数字，猜猜看！")
         
@@ -344,11 +376,13 @@ bot.start()
 
 ### 插件开发模板
 
+使用 `@Plugins` 装饰器直接在模块顶层注册命令/预处理器：
+
 ```python
 from easybot import Plugins, CommandValidScenes, Model
 
 @Plugins.before_command(valid_scenes=CommandValidScenes.ALL)
-def preprocessor(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
+async def preprocessor(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     print(f"预处理: {msg.treated_msg}")
 
 @Plugins.on_command(
@@ -357,10 +391,9 @@ def preprocessor(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage
 )
 async def help_command(msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage):
     await msg.reply("这是帮助信息")
-
-def register(bot):
-    bot.logger.info("插件已加载")
 ```
+
+> **说明**：插件被自动加载时，SDK 会扫描模块中所有 `@Plugins.on_command` 和 `@Plugins.before_command` 装饰的函数并自动注册。
 
 ### 插件热重载
 

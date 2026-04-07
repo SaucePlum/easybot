@@ -36,7 +36,7 @@ async def guess_number_game(
     max_attempts = 10
 
     with bot.session.bind(msg) as s:
-        s.new(
+        await s.new(
             scope=Scope.USER,
             key="guess_game",
             data={
@@ -64,7 +64,7 @@ async def guess_number_game(
 
                 if user_input == "退出":
                     await msg.reply(f"游戏结束！答案是 {target}")
-                    s.remove(scope=Scope.USER, key="guess_game")
+                    await s.remove(scope=Scope.USER, key="guess_game")
                     break
 
                 try:
@@ -76,9 +76,9 @@ async def guess_number_game(
                     await msg.reply("请输入有效的数字！")
                     continue
 
-                session = s.get(Scope.USER, "guess_game")
+                session = await s.get(Scope.USER, "guess_game")
                 attempts = session.data["attempts"] + 1
-                s.update(Scope.USER, "guess_game", {"attempts": attempts})
+                await s.update(Scope.USER, "guess_game", {"attempts": attempts})
 
                 if guess == target:
                     await msg.reply(
@@ -86,7 +86,7 @@ async def guess_number_game(
                         f"答案就是 {target}\n"
                         f"你用了 {attempts} 次猜中"
                     )
-                    s.remove(scope=Scope.USER, key="guess_game")
+                    await s.remove(scope=Scope.USER, key="guess_game")
                     break
                 elif attempts >= max_attempts:
                     await msg.reply(
@@ -94,7 +94,7 @@ async def guess_number_game(
                         f"你已经用完了 {max_attempts} 次机会\n"
                         f"正确答案是 {target}"
                     )
-                    s.remove(scope=Scope.USER, key="guess_game")
+                    await s.remove(scope=Scope.USER, key="guess_game")
                     break
                 elif guess < target:
                     remaining = max_attempts - attempts
@@ -105,7 +105,7 @@ async def guess_number_game(
 
             except WaitTimeoutError:
                 await msg.reply(f"⏰ 等待超时！答案是 {target}")
-                s.remove(scope=Scope.USER, key="guess_game")
+                await s.remove(scope=Scope.USER, key="guess_game")
                 break
 
 
@@ -116,7 +116,7 @@ async def continue_game(
     ),
 ):
     with bot.session.bind(msg) as s:
-        session = s.get(Scope.USER, "guess_game")
+        session = await s.get(Scope.USER, "guess_game")
 
         if not session or not session.data.get("is_active"):
             await msg.reply("没有进行中的游戏，发送「猜数字」开始新游戏")

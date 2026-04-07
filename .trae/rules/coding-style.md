@@ -107,3 +107,228 @@ def method_name(self, param1: str, param2: int) -> bool:
 - 使用中文编写注释（与用户规则保持一致）
 - 避免显而易见的注释，如 `# 增加计数器 i += 1`
 - 对于复杂逻辑，添加行内注释说明设计决策原因
+
+## 代码组织最佳实践
+
+### 模块导入顺序
+```python
+# 1. 标准库
+import asyncio
+import logging
+from typing import TYPE_CHECKING, Any, Callable
+
+# 2. 第三方库
+import aiohttp
+
+# 3. 本地应用导入
+from .exceptions import APIError
+from .models import Model
+
+# 4. TYPE_CHECKING 导入（避免循环依赖）
+if TYPE_CHECKING:
+    from .bot import Bot
+```
+
+### 类属性定义顺序
+```python
+class Bot:
+    """Bot 类文档字符串"""
+
+    # 类常量
+    DEFAULT_TIMEOUT = 20
+
+    # 类变量
+    _instances: dict[str, "Bot"] = {}
+
+    # 实例初始化
+    def __init__(self, app_id: str, app_secret: str):
+        self._app_id = app_id
+        self._app_secret = app_secret
+
+    # 属性装饰器
+    @property
+    def app_id(self) -> str:
+        return self._app_id
+
+    # 公共方法
+    def start(self) -> None:
+        pass
+
+    # 私有方法
+    def _initialize(self) -> None:
+        pass
+
+    # 上下文管理器
+    async def __aenter__(self) -> "Bot":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+        await self.stop_async()
+        return False
+```
+
+### 函数参数设计
+- 必需参数在前，可选参数在后
+- 使用类型注解和默认值
+- 避免可变默认参数（如 `[]`, `{}`）
+
+```python
+# 好的做法
+def send_message(
+    self,
+    channel_id: str,
+    content: str,
+    mention: bool = False,
+    reply_to: str | None = None,
+) -> Model.Message:
+    pass
+
+# 不好的做法
+def send_message(self, channel_id, content, mention=False, reply_to=None):
+    pass
+
+# 避免可变默认参数
+def add_items(self, items: list | None = None):  # 好
+    if items is None:
+        items = []
+
+def add_items(self, items=[]):  # 不好！
+    pass
+```
+
+## 错误处理风格
+
+### 异常捕获
+- 捕获具体异常而非宽泛的 `Exception`
+- 使用 `as` 语法绑定异常变量
+- 记录异常信息用于调试
+
+```python
+# 好的做法
+try:
+    result = await self.api.call()
+except APIError as e:
+    self.logger.error(f"API 调用失败: {e}")
+    raise
+except asyncio.TimeoutError as e:
+    self.logger.warning(f"请求超时: {e}")
+    raise NetworkError("请求超时") from e
+
+# 不好的做法
+try:
+    result = await self.api.call()
+except Exception:  # 太宽泛
+    pass  # 吞掉异常
+```
+
+### 异常链
+使用 `raise ... from` 保留原始异常信息：
+```python
+try:
+    data = json.loads(response_text)
+except json.JSONDecodeError as e:
+    raise ValidationError("无效的 JSON 数据") from e
+```
+
+## 代码复杂度控制
+
+### 函数长度
+- 单个函数不超过 50 行（不含文档字符串）
+- 超过 30 行考虑拆分
+
+### 圈复杂度
+- 单个函数的分支不超过 5 个
+- 嵌套层级不超过 3 层
+- 使用早返回（early return）减少嵌套
+
+```python
+# 好的做法：早返回
+def process_message(self, msg: Model.GuildMessage) -> None:
+    if not msg.content:
+        return
+
+    if not self._is_valid(msg):
+        self.logger.warning("无效消息")
+        return
+
+    # 主逻辑
+    self._handle(msg)
+
+# 不好的做法：深层嵌套
+def process_message(self, msg: Model.GuildMessage) -> None:
+    if msg.content:
+        if self._is_valid(msg):
+            # 主逻辑
+            self._handle(msg)
+        else:
+            self.logger.warning("无效消息")
+```
+
+## 文档字符串模板
+
+### 模块级文档
+```python
+"""
+API 封装模块
+
+提供对 QQ 机器人 HTTP API 的封装，包括：
+- 频道管理 API
+- 消息发送 API
+- 成员管理 API
+
+使用示例：
+    bot = Bot(app_id="...", app_secret="...")
+    guilds = await bot.api.get_guild_list()
+"""
+```
+
+### 类级文档
+```python
+class API:
+    """
+    API 封装类
+
+    提供对 QQ 机器人 HTTP API 的完整封装，支持：
+    - 频道、子频道管理
+    - 消息发送与回复
+    - 成员权限管理
+    - 用户信息获取
+
+    Attributes:
+        bot: 关联的 Bot 实例
+        logger: 日志记录器
+
+    Examples:
+        >>> api = API(bot)
+        >>> guilds = await api.get_guild_list()
+    """
+```
+
+### 方法级文档
+```python
+async def send_message(
+    self,
+    channel_id: str,
+    content: str,
+    mention: bool = False,
+) -> Model.Message:
+    """
+    发送频道消息
+
+    Args:
+        channel_id: 子频道 ID
+        content: 消息内容
+        mention: 是否 @ 全体成员（需要权限）
+
+    Returns:
+        发送的消息对象
+
+    Raises:
+        APIError: API 调用失败
+        PermissionError: 无权限 @ 全体成员
+
+    Examples:
+        >>> msg = await api.send_message("123456", "Hello World")
+        >>> print(msg.id)
+    """
+```

@@ -97,7 +97,7 @@ async def some_operation(self):
 
 ### 防止阻塞
 - CPU 密集型操作使用 `loop.run_in_executor()` 在线程池中执行
-- 文件 I/O 使用 `aiofiles` 或 `run_in_executor()`
+- 文件 I/O 使用 `asyncio.to_thread()` 卸载到线程池（Python 3.9+）
 - 设置合理的超时时间避免永久等待：
 ```python
 try:
@@ -109,6 +109,31 @@ except asyncio.TimeoutError:
 ### 共享状态保护
 - 异步代码中的共享可变状态需要使用 `asyncio.Lock` 保护
 - 日志系统的共享 handler 已内置线程安全机制（参考 LoggerManager）
+
+## 线程池使用规范
+
+### asyncio.to_thread() 使用
+对于同步 I/O 操作，使用 `asyncio.to_thread()` 卸载到线程池：
+```python
+# 文件读取
+def _sync_read():
+    with open(data_path, "rb") as f:
+        return pickle.load(f)
+
+data = await asyncio.to_thread(_sync_read)
+
+# 文件写入
+def _sync_write():
+    with open(data_path, "wb") as f:
+        pickle.dump(data, f)
+
+await asyncio.to_thread(_sync_write)
+```
+
+### 使用场景
+- 文件系统操作（读取/写入配置、数据持久化）
+- 阻塞式第三方库调用
+- CPU 密集型计算（考虑进程池替代）
 
 ## WebSocket 连接管理
 
@@ -134,3 +159,88 @@ except asyncio.TimeoutError:
 - 及时释放不再需要的引用
 - 大数据处理使用流式而非一次性加载
 - 注意闭包中的变量捕获导致的内存泄漏
+
+### 让出控制权
+在长时间运行的循环中定期让出事件循环：
+```python
+yield_threshold = 100
+for i, item in enumerate(large_list):
+    # 处理逻辑
+    if i % yield_threshold == 0:
+        await asyncio.sleep(0)  # 让出控制权
+```
+
+## 会话管理异步模式
+
+### 异步初始化
+会话管理器需要异步加载数据：
+```python
+async def fetch_data(self):
+    """从文件加载会话数据（异步）"""
+    try:
+        def _sync_read():
+            if os.path.exists(data_path):
+                with open(data_path, "rb") as f:
+                    return pickle.load(f)
+            return None
+
+        data = await asyncio.to_thread(_sync_read)
+        # 处理数据...
+    except Exception as e:
+        self.logger.error(f"加载数据失败: {e}")
+```
+
+### 后台任务管理
+使用 `create_task` 启动后台管理循环：
+```python
+def start(self, loop: AbstractEventLoop):
+    """启动后台任务"""
+    if not self._is_running:
+        loop.create_task(self._manager_loop(loop))
+        loop.create_task(self.fetch_data())
+        self._is_running = True
+```
+
+## 超时处理最佳实践
+
+### msg_id 有效期处理
+QQ 平台的 msg_id 有 5 分钟有效期，超时后需要特殊处理：
+```python
+msg_id_expired = (
+    session.timeout_reply_message_id_expire
+    and time() > session.timeout_reply_message_id_expire
+)
+
+if msg_id_expired:
+    if session.send_reply_on_msg_id_expired:
+        # 移除 msg_id，发送主动消息（消耗主动消息配额）
+        del session.timeout_reply_params["msg_id"]
+        self.logger.warning("msg_id 已过期，将以主动消息形式发送")
+    else:
+        # 跳过发送，避免消耗主动消息配额
+        self.logger.warning("msg_id 已过期，跳过发送超时回复")
+        return
+```
+
+## 异步上下文管理器
+
+### bind() 上下文管理器
+用于绑定消息对象到会话管理：
+```python
+@contextmanager
+def bind(self, obj):
+    """绑定消息对象的上下文管理器"""
+    old_obj = self._current_obj
+    self._current_obj = obj
+    try:
+        yield BoundSession(self, obj)
+    finally:
+        self._current_obj = old_obj
+```
+
+### 使用示例
+```python
+with session.bind(msg) as s:
+    await s.new(Scope.USER, "key", {"data": "value"})
+    data = await s.get(Scope.USER, "key")
+```

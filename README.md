@@ -42,15 +42,51 @@ pip install easybot-qq
 ### 最简示例 — ~6 行启动机器人
 
 ```python
-from easybot import Bot
+from easybot import Bot, Model
 
 bot = Bot(app_id="你的AppID", app_secret="你的AppSecret")
 
 @bot.on_guild_message
-async def on_message(msg):
+async def on_message(msg: Model.GuildMessage) -> None:
     await msg.reply("Hello World!")
 
 bot.start()
+```
+
+> 公域机器人只会收到频道内 @它 的消息；请在频道中 @机器人进行测试。
+
+### 最小错误处理（推荐）
+
+```python
+from easybot import Bot, Model, APIError, NetworkError, RateLimitError
+
+bot = Bot(app_id="你的AppID", app_secret="你的AppSecret")
+
+@bot.on_guild_message
+async def on_message(msg: Model.GuildMessage) -> None:
+    try:
+        await msg.reply(f"你说：{msg.treated_msg}")
+    except RateLimitError as e:
+        bot.logger.warning(f"触发频率限制：{e}")
+    except (APIError, NetworkError) as e:
+        bot.logger.error(f"回复失败：{e}")
+
+bot.start()
+```
+
+### 异步启动（自行管理事件循环）
+
+```python
+import asyncio
+from easybot import Bot, Model
+
+bot = Bot(app_id="你的AppID", app_secret="你的AppSecret")
+
+@bot.on_guild_message
+async def on_message(msg: Model.GuildMessage) -> None:
+    await msg.reply("Hello World!")
+
+asyncio.run(bot.start_async())
 ```
 
 ### 多场景消息处理 — 一个 Bot 打天下
@@ -78,23 +114,29 @@ bot.start()
 ### 亮点展示 — WaitFor 多轮对话 & 指令系统
 
 ```python
-from easybot import Bot, Model, Scope
+from easybot import Bot, CommandValidScenes, Model, Scope
 
 bot = Bot(app_id="你的AppID", app_secret="你的AppSecret")
 
 # 指令系统：正则 + 管理员权限 + 短路机制，一行搞定
-@bot.on_command(regex=r"^查询 (.+)$", is_require_admin=True)
-async def query(msg: Model.GuildMessage):
-    await msg.reply(f"查询结果: {msg.command_args[0]}")
+@bot.on_command(
+    regex=r"^查询 (.+)$",
+    is_require_admin=True,
+    valid_scenes=CommandValidScenes.GUILD,
+)
+async def query(msg: Model.GuildMessage) -> None:
+    await msg.reply(f"查询结果: {msg.treated_msg[0]}")
 
 # 会话管理：WaitFor 等待用户回复，天然支持多轮对话
 @bot.on_command(command=["签到"])
-async def check_in(msg, session=None):
+async def check_in(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
     with bot.session.bind(msg) as s:
-        s.new(Scope.USER, "check_in", {"step": "confirm"})
+        await s.new(Scope.USER, "check_in", {"step": "confirm"})
         await msg.reply("确认签到吗？(回复 yes/no)")
-        reply = await s.wait_for(Scope.USER, ["yes", "no"], timeout=30)
-        if reply.treated_msg == "yes":
+        reply = await s.wait_for(scopes=Scope.USER, command=["yes", "no"], timeout=30)
+        if reply.content.strip() == "yes":
             await msg.reply("✅ 签到成功！")
         else:
             await msg.reply("已取消签到。")
@@ -130,7 +172,7 @@ bot.start()
 | 🤖 **事件系统** | 40+ 事件装饰器，覆盖频道 / 群聊 / C2C / 私信 / 论坛 / 音频等全场景 |
 | 💬 **会话管理** | Session 五级作用域 + WaitFor 异步等待，超时自动回复 + GC 回收 |
 | 🎮 **指令系统** | 关键词 / 正则匹配、管理员权限、短路机制、多场景隔离、预处理器 |
-| 🧩 **插件生态** | 自动扫描目录加载，支持 register() 函数与装饰器两种注册方式 |
+| 🧩 **插件生态** | 自动扫描目录加载，支持装饰器注册方式 |
 | ⏰ **生命周期** | startup / shutdown / timer 三大内置事件 |
 | 🔒 **沙箱模式** | 一键开启沙箱环境，安全调试不干扰线上 |
 
