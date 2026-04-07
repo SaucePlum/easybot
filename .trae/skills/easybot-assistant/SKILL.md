@@ -362,6 +362,41 @@ def register(bot):
     bot.logger.info("插件已加载")
 ```
 
+### 插件热重载
+
+EasyBot 支持插件热重载，无需重启机器人即可更新插件代码：
+
+```python
+# 热重载单个插件（通过插件名或命令名）
+result = bot.reload_plugin("admin")  # 插件名
+result = bot.reload_plugin("help")   # 命令名
+
+# 热重载所有插件
+results = bot.reload_all_plugins()
+
+# 卸载插件
+bot.unload_plugin("admin")
+
+# 获取已加载的插件列表
+plugins = bot.get_loaded_plugins()
+```
+
+**重载结果示例：**
+
+```python
+{
+    "module": "admin",
+    "success": True,
+    "unloaded": {"commands": 3, "preprocessors": 1},
+    "loaded": {"commands": 4, "preprocessors": 1}
+}
+```
+
+**注意事项：**
+- 热重载仅支持通过 `@Plugins.on_command` 注册的插件
+- 不支持 `@bot.on_command` 注册的命令
+- 修改插件后调用 `reload_plugin()` 即可生效
+
 ## 消息类型对照表
 
 ### 事件处理器类型

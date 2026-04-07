@@ -324,8 +324,8 @@ class EventDispatcher:
                     should_short_circuit = bool(result)
                 else:
                     asyncio.create_task(
-                        self._execute_command_with_result(best_cmd, model)
-                    )
+                        self._execute_command_async(best_cmd, model)
+                    ).add_done_callback(self._on_command_task_done)
                     should_short_circuit = best_cmd.short_circuit
             else:
                 result = best_cmd.func(model)
@@ -363,6 +363,39 @@ class EventDispatcher:
         except Exception as e:
             self._logger.exception(f"命令执行错误: {e}")
             return None
+
+    async def _execute_command_async(self, cmd: Any, model: Any) -> None:
+        """
+        异步执行命令回调（fire-and-forget 模式）
+
+        用于不需要获取返回值的场景，异常由内部捕获并记录
+
+        Args:
+            cmd: 命令对象
+            model: 消息模型
+        """
+        try:
+            sig = inspect.signature(cmd.func)
+            if "session" in sig.parameters:
+                await cmd.func(model, session=self._bot.session)
+            else:
+                await cmd.func(model)
+        except Exception as e:
+            self._logger.exception(f"命令执行错误: {e}")
+
+    def _on_command_task_done(self, task: asyncio.Task[None]) -> None:
+        """
+        异步任务完成回调
+
+        作为防御性机制处理 _execute_command_async 可能遗漏的异常，
+        避免未处理的异常在 Task 被 GC 时产生警告
+
+        Args:
+            task: 已完成的异步任务
+        """
+        exception = task.exception()
+        if exception:
+            self._logger.exception(f"异步任务执行出现未捕获的异常: {exception}")
 
     def _check_message_contains_at(self, model: Any) -> bool:
         """检查消息是否包含艾特机器人"""
@@ -457,6 +490,9 @@ class EventDispatcher:
     ) -> None:
         """安全调用事件处理器，捕获异常并记录日志"""
         try:
-            await handler(data)
+            if asyncio.iscoroutinefunction(handler):
+                await handler(data)
+            else:
+                handler(data)
         except Exception as e:
             self._logger.exception(f"事件处理器执行错误 [{event_type}]: {e}")

@@ -115,17 +115,17 @@ def main():
         bot_admin_error_msg="此命令仅机器人管理员可用",
     )
     async def enable_cmd(msg: Model.GroupMessage | Model.C2CMessage):
-        """启用指定命令"""
-        func_name = msg.treated_msg.strip() if msg.treated_msg else ""
+        """启用指定命令（支持函数名或命令名）"""
+        arg = msg.treated_msg.strip() if msg.treated_msg else ""
 
-        if not func_name:
-            await msg.reply("用法: /启用 <命令函数名>")
+        if not arg:
+            await msg.reply("用法: /启用 <函数名或命令名>\n示例: /启用 ping_cmd\n示例: /启用 /ping")
             return
 
-        if bot.enable_command(func_name):
-            await msg.reply(f"✅ 命令 {func_name} 已启用")
+        if bot.enable_command(arg):
+            await msg.reply(f"✅ 命令 {arg} 已启用")
         else:
-            await msg.reply(f"❌ 命令不存在: {func_name}")
+            await msg.reply(f"❌ 命令不存在: {arg}")
 
     @bot.on_command(
         command="/禁用",
@@ -133,17 +133,17 @@ def main():
         bot_admin_error_msg="此命令仅机器人管理员可用",
     )
     async def disable_cmd(msg: Model.GroupMessage | Model.C2CMessage):
-        """禁用指定命令"""
-        func_name = msg.treated_msg.strip() if msg.treated_msg else ""
+        """禁用指定命令（支持函数名或命令名）"""
+        arg = msg.treated_msg.strip() if msg.treated_msg else ""
 
-        if not func_name:
-            await msg.reply("用法: /禁用 <命令函数名>")
+        if not arg:
+            await msg.reply("用法: /禁用 <函数名或命令名>\n示例: /禁用 ping_cmd\n示例: /禁用 /ping")
             return
 
-        if bot.disable_command(func_name):
-            await msg.reply(f"✅ 命令 {func_name} 已禁用")
+        if bot.disable_command(arg):
+            await msg.reply(f"✅ 命令 {arg} 已禁用")
         else:
-            await msg.reply(f"❌ 命令不存在: {func_name}")
+            await msg.reply(f"❌ 命令不存在: {arg}")
 
     @bot.on_command(
         command="/卸载插件",

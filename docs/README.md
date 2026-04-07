@@ -13,10 +13,10 @@ bannerBrand:
   bgImage: /bg.svg
   buttons:
     - text: 快速开始
-      link: /02_快速入门
+      link: /easybot/02_快速入门
       type: link
     - text: 了解更多
-      link: /01_简介
+      link: /easybot/01_简介
       type: link
 features:
   - title: 极简优先
@@ -49,7 +49,7 @@ footer:
 ::: code-group-item pip
 
 ```bash
-pip install easybot-sdk
+pip install easybot-qq
 ```
 
 :::

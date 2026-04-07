@@ -328,6 +328,7 @@ class Plugins:
     _module_commands: dict[str, list[str]] = defaultdict(list)
     _module_preprocessors: dict[str, list[str]] = defaultdict(list)
     _command_to_module: dict[str, str] = {}
+    _module_paths: dict[str, Path] = {}
     _current_loading_module: str | None = None
 
     @classmethod
@@ -336,19 +337,21 @@ class Plugins:
         从调用栈获取调用者模块名
 
         用于追踪命令和预处理器的归属模块，支持热重载功能。
+        跳过 easybot 包内部的模块，返回外部调用者的模块名。
         """
         if cls._current_loading_module is not None:
             return cls._current_loading_module
 
         frame = inspect.currentframe()
         try:
-            for _ in range(10):
+            for _ in range(15):
                 frame = frame.f_back
                 if frame is None:
                     break
                 module_name = frame.f_globals.get("__name__", "")
                 if module_name and not module_name.startswith("_"):
-                    return module_name
+                    if not module_name.startswith("easybot"):
+                        return module_name
             return "__main__"
         finally:
             del frame
@@ -364,86 +367,104 @@ class Plugins:
         return Plugins._commands.copy()
 
     @classmethod
-    def find_command(cls, func_name: str) -> BotCommandObject | None:
+    def find_command(cls, func_name_or_command: str) -> BotCommandObject | None:
         """
-        根据函数名查找命令对象
+        查找命令对象
+
+        支持两种查找方式：
+        - 通过函数名：如 "ping_cmd"
+        - 通过命令名：如 "/ping" 或 "ping"（自动去除 / 前缀）
 
         Args:
-            func_name: 命令函数的名称
+            func_name_or_command: 函数名或命令名
 
         Returns:
             找到的命令对象，未找到返回 None
         """
-        for cmd in Plugins._commands:
-            if cmd.func.__name__ == func_name:
+        cmd_name = func_name_or_command.lstrip("/")
+        for cmd in cls._commands:
+            if cmd.func.__name__ == func_name_or_command:
                 return cmd
+            if cmd.command:
+                for trigger in cmd.command:
+                    if trigger.lstrip("/") == cmd_name:
+                        return cmd
+
         return None
 
     @classmethod
-    def enable_command(cls, func_name: str) -> bool:
+    def enable_command(cls, func_name_or_command: str) -> bool:
         """
         启用指定的命令
 
+        支持通过函数名或命令名查找。
+
         Args:
-            func_name: 命令函数的名称
+            func_name_or_command: 函数名或命令名
 
         Returns:
             是否成功启用
         """
-        cmd = cls.find_command(func_name)
+        cmd = cls.find_command(func_name_or_command)
         if cmd:
             cmd.enabled = True
             return True
         return False
 
     @classmethod
-    def disable_command(cls, func_name: str) -> bool:
+    def disable_command(cls, func_name_or_command: str) -> bool:
         """
         禁用指定的命令
 
+        支持通过函数名或命令名查找。
+
         Args:
-            func_name: 命令函数的名称
+            func_name_or_command: 函数名或命令名
 
         Returns:
             是否成功禁用
         """
-        cmd = cls.find_command(func_name)
+        cmd = cls.find_command(func_name_or_command)
         if cmd:
             cmd.enabled = False
             return True
         return False
 
     @classmethod
-    def is_command_enabled(cls, func_name: str) -> bool | None:
+    def is_command_enabled(cls, func_name_or_command: str) -> bool | None:
         """
         检查指定的命令是否启用
 
+        支持通过函数名或命令名查找。
+
         Args:
-            func_name: 命令函数的名称
+            func_name_or_command: 函数名或命令名
 
         Returns:
             是否启用，未找到返回 None
         """
-        cmd = cls.find_command(func_name)
+        cmd = cls.find_command(func_name_or_command)
         if cmd:
             return cmd.enabled
         return None
 
     @classmethod
-    def remove_command(cls, func_name: str) -> bool:
+    def remove_command(cls, func_name_or_command: str) -> bool:
         """
         移除指定的命令
 
+        支持通过函数名或命令名查找。
+
         Args:
-            func_name: 命令函数的名称
+            func_name_or_command: 函数名或命令名
 
         Returns:
             是否成功移除
         """
-        for i, cmd in enumerate(Plugins._commands):
-            if cmd.func.__name__ == func_name:
-                del Plugins._commands[i]
-                return True
+        cmd = cls.find_command(func_name_or_command)
+        if cmd and cmd in cls._commands:
+            cls._commands.remove(cmd)
+            return True
         return False
 
     @classmethod
@@ -552,7 +573,7 @@ class Plugins:
             Plugins._module_commands[module_name].append(func.__name__)
             if command_obj.command:
                 for cmd_name in command_obj.command:
-                    Plugins._command_to_module[cmd_name] = module_name
+                    Plugins._command_to_module[cmd_name.lstrip("/")] = module_name
             return func
 
         return wrap
@@ -562,16 +583,18 @@ class Plugins:
         """
         获取所有已加载插件的模块名列表
 
-        过滤掉 SDK 内部模块（easybot.plugins）
+        过滤掉非插件模块：
+        - SDK 内部模块（easybot.plugins）
+        - 主程序模块（__main__）
 
         Returns:
             插件名列表
         """
-        modules = set(cls._module_commands.keys()) | set(
-            cls._module_preprocessors.keys()
-        )
-        filtered = [m for m in modules if m != "easybot.plugins"]
-        return filtered
+        return [
+            m
+            for m in cls._module_paths.keys()
+            if m != "easybot.plugins" and m != "__main__"
+        ]
 
     @classmethod
     def _find_module_by_name(cls, plugin_name: str) -> str | None:
@@ -580,7 +603,7 @@ class Plugins:
 
         支持模糊匹配：
         - 精确匹配: "hot_reload" -> "hot_reload"
-        - 后缀匹配: "hot_reload" -> "plugins.hot_reload"
+        - 后缀匹配: "admin" -> "admin.admin"
 
         Args:
             plugin_name: 插件名（文件名，不含 .py）
@@ -626,80 +649,52 @@ class Plugins:
         return cls._module_preprocessors.get(plugin_name, []).copy()
 
     @classmethod
-    def _get_module_by_command(cls, command: str) -> str | None:
+    def reload_plugin(
+        cls, plugin_name_or_command: str, plugins_dir: str | Path = "plugins"
+    ) -> dict:
         """
-        根据命令名获取所属模块名（内部方法）
+        热重载指定插件
 
-        Args:
-            command: 命令名（如 "/ping"）
-
-        Returns:
-            模块名，未找到返回 None
-        """
-        return cls._command_to_module.get(command)
-
-    @classmethod
-    def _reload_by_command(cls, command: str) -> dict:
-        """
-        根据命令名热重载所属插件（内部方法）
-
-        Args:
-            command: 命令名（如 "/ping"）
-
-        Returns:
-            重载结果信息
-        """
-        module_name = cls._get_module_by_command(command)
-        if not module_name:
-            return {
-                "module": None,
-                "command": command,
-                "success": False,
-                "error": f"未找到命令 {command} 对应的模块",
-            }
-
-        from pathlib import Path
-
-        plugin_path = Path("plugins") / f"{module_name}.py"
-        if not plugin_path.exists():
-            return {
-                "module": module_name,
-                "command": command,
-                "success": False,
-                "error": f"插件文件不存在: {module_name}",
-            }
-
-        return cls._reload_module(plugin_path)
-
-    @classmethod
-    def reload_plugin(cls, plugin_name_or_command: str) -> dict:
-        """
-        自动识别并热重载插件
+        只支持通过 @Plugins.on_command 注册的插件，不支持 @bot.on_command 注册的命令。
 
         自动识别参数类型：
-        - 先尝试作为插件文件名
-        - 找不到则尝试作为命令名
+        - 先尝试从已加载模块获取路径
+        - 再尝试作为插件文件名
+        - 最后尝试作为命令名查找对应的插件
 
         Args:
             plugin_name_or_command: 插件名或命令名
+            plugins_dir: 插件目录路径
 
         Returns:
             重载结果信息
         """
-        from pathlib import Path
+        matched_module = cls._find_module_by_name(plugin_name_or_command)
+        if matched_module and matched_module in cls._module_paths:
+            return cls._reload_module(cls._module_paths[matched_module], plugins_dir)
 
-        plugin_path = Path("plugins") / f"{plugin_name_or_command}.py"
-
+        plugins_path = Path(plugins_dir)
+        plugin_path = plugins_path / f"{plugin_name_or_command}.py"
         if plugin_path.exists():
-            return cls._reload_module(plugin_path)
+            return cls._reload_module(plugin_path, plugins_dir)
 
-        cmd_name = plugin_name_or_command
-        if not cmd_name.startswith("/"):
-            cmd_name = f"/{cmd_name}"
+        plugin_subdir = (
+            plugins_path / plugin_name_or_command / f"{plugin_name_or_command}.py"
+        )
+        if plugin_subdir.exists():
+            return cls._reload_module(plugin_subdir, plugins_dir)
 
-        module_name = cls._get_module_by_command(cmd_name)
+        cmd_name = plugin_name_or_command.lstrip("/")
+        module_name = cls._command_to_module.get(cmd_name)
+
         if module_name:
-            return cls._reload_by_command(cmd_name)
+            if module_name in cls._module_paths:
+                return cls._reload_module(cls._module_paths[module_name], plugins_dir)
+            return {
+                "module": module_name,
+                "success": False,
+                "error": f"插件 {module_name} 未找到文件路径",
+            }
 
         loaded = cls.get_loaded_plugins()
         return {
@@ -710,16 +705,31 @@ class Plugins:
         }
 
     @classmethod
-    def unload_plugin(cls, plugin_name: str) -> dict[str, int]:
+    def unload_plugin(cls, plugin_name_or_command: str) -> dict[str, int]:
         """
         卸载指定插件的所有命令和预处理器
 
+        只支持通过 @Plugins.on_command 注册的插件，不支持 @bot.on_command 注册的命令。
+
+        自动识别参数类型：
+        - 先尝试作为插件名匹配
+        - 找不到则尝试作为命令名查找对应的插件
+
         Args:
-            plugin_name: 插件名（不含 .py 后缀）
+            plugin_name_or_command: 插件名或命令名
 
         Returns:
             包含卸载数量的字典: {"commands": int, "preprocessors": int}
         """
+        plugin_name = cls._find_module_by_name(plugin_name_or_command)
+
+        if plugin_name is None:
+            cmd_name = plugin_name_or_command.lstrip("/")
+            plugin_name = cls._command_to_module.get(cmd_name)
+
+        if plugin_name is None:
+            return {"commands": 0, "preprocessors": 0}
+
         result = {"commands": 0, "preprocessors": 0}
 
         if (
@@ -753,10 +763,14 @@ class Plugins:
             result["preprocessors"] = len(preprocessor_names)
             del cls._module_preprocessors[plugin_name]
 
+        cls._module_paths.pop(plugin_name, None)
+
         return result
 
     @classmethod
-    def _reload_module(cls, module_path: Path | str) -> dict:
+    def _reload_module(
+        cls, module_path: Path | str, plugins_dir: str | Path = "plugins"
+    ) -> dict:
         """
         热重载指定插件模块（内部方法）
 
@@ -764,6 +778,7 @@ class Plugins:
 
         Args:
             module_path: 插件文件路径（绝对路径或相对路径）
+            plugins_dir: 插件目录路径
 
         Returns:
             重载结果信息:
@@ -778,6 +793,13 @@ class Plugins:
         module_path = Path(module_path)
         module_name = module_path.stem
 
+        plugins_path = Path(plugins_dir)
+        if module_path.is_relative_to(plugins_path):
+            rel_path = module_path.relative_to(plugins_path)
+            parts = list(rel_path.parts)
+            if len(parts) > 1:
+                module_name = ".".join(parts[:-1] + [module_path.stem])
+
         result = {
             "module": module_name,
             "unloaded": {"commands": 0, "preprocessors": 0},
@@ -787,9 +809,9 @@ class Plugins:
         }
 
         try:
-            matched_module = cls._find_module_by_name(module_name)
+            matched_module = cls._find_module_by_name(module_path.stem)
             if matched_module:
-                result["unloaded"] = cls.unload_module(matched_module)
+                result["unloaded"] = cls.unload_plugin(matched_module)
                 if matched_module in sys.modules:
                     del sys.modules[matched_module]
 
@@ -803,6 +825,7 @@ class Plugins:
                 cls._current_loading_module = module_name
                 try:
                     spec.loader.exec_module(module)
+                    cls._module_paths[module_name] = module_path.resolve()
                 finally:
                     cls._current_loading_module = None
 
@@ -837,4 +860,6 @@ class Plugins:
         for scene_bit in cls._preprocessors:
             cls._preprocessors[scene_bit].clear()
         cls._module_preprocessors.clear()
+        cls._command_to_module.clear()
+        cls._module_paths.clear()
         return result

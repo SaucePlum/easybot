@@ -1041,13 +1041,20 @@ class Bot:
                 continue
 
             try:
-                module_name = plugin_file.stem
+                rel_path = plugin_file.relative_to(plugins_path)
+                parts = list(rel_path.parts)
+                if len(parts) > 1:
+                    module_name = ".".join(parts[:-1] + [plugin_file.stem])
+                else:
+                    module_name = plugin_file.stem
+
                 spec = importlib.util.spec_from_file_location(module_name, plugin_file)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
                     Plugins._current_loading_module = module_name
                     try:
                         spec.loader.exec_module(module)
+                        Plugins._module_paths[module_name] = plugin_file.resolve()
                     finally:
                         Plugins._current_loading_module = None
             except Exception as e:
@@ -1089,7 +1096,13 @@ class Bot:
                 continue
 
             try:
-                module_name = plugin_file.stem
+                rel_path = plugin_file.relative_to(plugins_path)
+                parts = list(rel_path.parts)
+                if len(parts) > 1:
+                    module_name = ".".join(parts[:-1] + [plugin_file.stem])
+                else:
+                    module_name = plugin_file.stem
+
                 spec = importlib.util.spec_from_file_location(module_name, plugin_file)
                 if spec and spec.loader:
                     commands_before = len(Plugins._commands)
@@ -1101,6 +1114,7 @@ class Bot:
                     Plugins._current_loading_module = module_name
                     try:
                         spec.loader.exec_module(module)
+                        Plugins._module_paths[module_name] = plugin_file.resolve()
                     finally:
                         Plugins._current_loading_module = None
 
@@ -1183,7 +1197,7 @@ class Bot:
         Returns:
             重载结果信息
         """
-        result = Plugins.reload_plugin(plugin_name_or_command)
+        result = Plugins.reload_plugin(plugin_name_or_command, self.plugins_dir)
 
         if result["success"]:
             self.logger.info(
@@ -1204,20 +1218,11 @@ class Bot:
             所有插件的重载结果列表
         """
         results = []
-        plugins_path = Path(self.plugins_dir)
+        plugins = Plugins.get_loaded_plugins()
 
-        if not plugins_path.exists():
-            self.logger.warning(f"插件目录不存在: {plugins_path}")
-            return results
-
-        pattern = "**/*.py" if self.plugins_recursive else "*.py"
-        plugin_files = list(plugins_path.glob(pattern))
-
-        for plugin_file in plugin_files:
-            if plugin_file.name.startswith("_") or plugin_file.name == "__init__.py":
-                continue
-
-            result = Plugins._reload_module(plugin_file)
+        for plugin in plugins:
+            short_name = plugin.split(".")[-1] if "." in plugin else plugin
+            result = Plugins.reload_plugin(short_name, self.plugins_dir)
             results.append(result)
 
             if result["success"]:
