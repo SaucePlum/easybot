@@ -49,7 +49,9 @@ def main() -> None:
 
         elif msg.treated_msg == "发送markdown":
             # 发送 Markdown 消息
-            await msg.reply(MessagesModel.MessageMarkdown(content="# API 发送的 Markdown"))
+            await msg.reply(
+                MessagesModel.MessageMarkdown(content="# API 发送的 Markdown")
+            )
 
         elif msg.treated_msg == "获取消息":
             # 获取指定消息
@@ -106,7 +108,9 @@ def main() -> None:
         elif msg.treated_msg == "发送embed":
             # 发送 Embed 消息
             await msg.reply(
-                MessagesModel.MessageEmbed(title="群公告", content=["公告内容1", "公告内容2"])
+                MessagesModel.MessageEmbed(
+                    title="群公告", content=["公告内容1", "公告内容2"]
+                )
             )
 
     # ==================== 10.3 单聊相关 API ====================
