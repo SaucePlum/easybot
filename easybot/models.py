@@ -18,7 +18,9 @@ from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeAlias, TypeVar
 if TYPE_CHECKING:
     from ._internal.reply_strategy import ReplyStrategy
     from .api import API
+    from .bot import Bot
     from .builders import MessagesModel
+    from .session import SessionManager
 
 
 # ==================== 生命周期事件模型 ====================
@@ -313,6 +315,45 @@ class BaseModel:
         if self._reply_strategy is None:
             return None
         return self._reply_strategy._api
+
+    @property
+    def bot(self) -> "Bot | None":
+        """
+        获取 Bot 实例
+
+        通过此属性可以访问机器人实例，用于获取 session 等功能。
+
+        Returns:
+            Bot 实例，如果模型不支持则返回 None
+
+        使用示例:
+            # 使用会话管理
+            with msg.bot.session.bind(msg) as s:
+                await s.new(Scope.USER, "key", {"data": "value"})
+        """
+        if self._reply_strategy is None:
+            return None
+        return self._reply_strategy._api._bot
+
+    @property
+    def session(self) -> "SessionManager | None":
+        """
+        获取会话管理器
+
+        这是访问会话管理器的快捷方式，等同于 msg.bot.session。
+
+        Returns:
+            SessionManager 实例，如果模型不支持则返回 None
+
+        使用示例:
+            # 在插件中使用会话（推荐方式）
+            with msg.session.bind(msg) as s:
+                await s.new(Scope.USER, "key", {"data": "value"})
+                data = await s.get(Scope.USER, "key")
+        """
+        if self._reply_strategy is None:
+            return None
+        return self._reply_strategy._api._bot.session
 
 
 # 用户相关模型

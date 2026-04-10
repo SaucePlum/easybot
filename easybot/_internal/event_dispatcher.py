@@ -120,7 +120,8 @@ class EventDispatcher:
         # 2. 消息去重
         if not skip_dedup and self._deduplicator is not None:
             message_id = data.get("id", "")
-            if message_id and not self._deduplicator.check_and_mark(message_id):
+            dedup_key = f"{event_type}:{message_id}" if message_id else ""
+            if dedup_key and not self._deduplicator.check_and_mark(dedup_key):
                 self._logger.debug(f"重复消息被过滤: {event_type}, id={message_id}")
                 return DispatchResult(
                     dispatched=False,

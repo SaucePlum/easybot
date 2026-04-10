@@ -7,12 +7,6 @@ EasyBot SDK 示例 15：大文件分片上传
 - 方式二：手动控制流程（适合显示进度）
 - 方式三：底层控制（适合自定义上传逻辑）
 
-文件大小限制：
-- 图片：10MB
-- 视频：100MB
-- 语音：10MB
-- 文件：100MB
-
 适用场景：
 - 单聊：user_openid
 - 群聊：group_openid
@@ -497,11 +491,6 @@ def main() -> None:
             "2 = 视频（MP4、AVI、MOV等）\n"
             "3 = 语音（MP3、WAV、AMR等）\n"
             "4 = 文件（PDF、DOC、ZIP等）\n\n"
-            "大小限制：\n"
-            "- 图片：10MB\n"
-            "- 视频：100MB\n"
-            "- 语音：10MB\n"
-            "- 文件：100MB\n\n"
             "使用示例：\n"
             "- 上传视频 ./videos/test.mp4\n"
             "- 上传文件 ./documents/report.pdf\n"

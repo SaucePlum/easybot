@@ -93,17 +93,17 @@ class UnifiedReplyStrategy(ReplyStrategy):
         event_id: str,
         msg_id: str = "",
     ):
-        self._api = api
-        self._scene = scene
-        self._locator = locator
-        self._event_id = event_id
-        self._msg_id = msg_id
+        self._api: "API" = api
+        self._scene: str = scene
+        self._locator: str = locator
+        self._event_id: str = event_id
+        self._msg_id: str = msg_id
 
     async def reply(
         self,
-        content,
-        reference=False,
-        msg_seq=1,
+        content: "str | MessagesModel.Message | MessagesModel.MessageEmbed | MessagesModel.MessageArk23 | MessagesModel.MessageArk24 | MessagesModel.MessageArk37 | MessagesModel.MessageMarkdown | None" = None,
+        reference: bool = False,
+        msg_seq: int = 1,
         image: str | None = None,
         file_image: bytes | BinaryIO | str | None = None,
         media_file_info: str | None = None,

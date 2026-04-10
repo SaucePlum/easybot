@@ -27,8 +27,14 @@
 ```python
 async def reply(
     self,
-    content: str | MessagesModel,
+    content: str | MessagesModel.Message | MessagesModel.MessageEmbed | MessagesModel.MessageArk23 | MessagesModel.MessageArk24 | MessagesModel.MessageArk37 | MessagesModel.MessageMarkdown | None = None,
     reference: bool = False,
+    image: str | None = None,
+    file_image: bytes | BinaryIO | str | None = None,
+    media_file_info: str | None = None,
+    msg_type: int | None = None,
+    is_wakeup: bool = False,
+    channel_id: str | None = None,
 )
 ```
 
@@ -36,8 +42,14 @@ async def reply(
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `content` | `str \| MessagesModel` | — | 回复内容，支持文本或任意消息构建器 |
+| `content` | `str \| MessagesModel.* \| None` | — | 回复内容，支持文本或任意消息构建器 |
 | `reference` | `bool` | `False` | 是否引用原消息 |
+| `image` | `str \| None` | `None` | 图片 URL（频道/私信普通消息） |
+| `file_image` | `bytes \| BinaryIO \| str \| None` | `None` | 图片数据，支持 bytes、BinaryIO 或文件路径（频道/私信普通消息） |
+| `media_file_info` | `str \| None` | `None` | 富媒体文件信息（群聊/单聊 v2，需先调用 `upload_media`） |
+| `msg_type` | `int \| None` | `None` | 消息类型，默认按内容自动推断 |
+| `is_wakeup` | `bool` | `False` | 是否发送互动召回消息（仅 QQ 单聊 v2） |
+| `channel_id` | `str \| None` | `None` | 子频道 ID。仅频道类被动事件在缺少默认目标时需要显式传入 |
 
 #### 使用示例
 
@@ -247,11 +259,15 @@ await bot.api.recall_guild_message(
 await bot.api.patch_guild_message(
     channel_id: str,                          # 子频道 ID
     patch_msg_id: str,                        # 需要修改的消息 ID
-    content: str | MessagesModel.Message | MessagesModel.MessageEmbed | MessagesModel.MessageArk23 | MessagesModel.MessageArk24 | MessagesModel.MessageArk37 | MessagesModel.MessageMarkdown | None = None,    # 消息内容
+    content: str | MessagesModel.MessageMarkdown | None = None,    # 消息内容
     msg_id: str | None = None,                # 要回复的消息 ID
     event_id: str | None = None,              # 要回复的事件 ID
 ) -> Model.GuildMessage
 ```
+
+**说明**：
+
+根据 QQ 官方接口限制，`patch_guild_message` 仅支持修改 Markdown 和 Keyboard 内容，因此只接受 `str` 或 `MessageMarkdown` 类型。
 
 ### 2.2 群聊消息
 
@@ -1028,15 +1044,6 @@ await bot.api.respond_interaction(
 ## 十四、大文件分片上传 API
 
 大文件分片上传支持上传超过 10MB 的文件，适用于视频、大文档等场景。
-
-### 14.1 文件大小限制
-
-| 文件类型 | 大小限制 | file_type |
-|---------|---------|-----------|
-| 图片 | 10MB | 1 |
-| 视频 | 100MB | 2 |
-| 语音 | 10MB | 3 |
-| 文件 | 100MB | 4 |
 
 ### 14.2 一键上传（推荐）
 

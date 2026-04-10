@@ -47,8 +47,8 @@ class API:
         Args:
             bot: Bot 实例
         """
-        self._bot = bot
-        self._http = None
+        self._bot: "Bot" = bot
+        self._http: HTTPClient | None = None
         self._logger = bot.logger.with_module("api")
 
     async def _get_http(self) -> HTTPClient:
@@ -520,16 +520,7 @@ class API:
         self,
         channel_id: str,
         patch_msg_id: str,
-        content: (
-            str
-            | MessagesModel.Message
-            | MessagesModel.MessageEmbed
-            | MessagesModel.MessageArk23
-            | MessagesModel.MessageArk24
-            | MessagesModel.MessageArk37
-            | MessagesModel.MessageMarkdown
-            | None
-        ) = None,
+        content: str | MessagesModel.MessageMarkdown | None = None,
         msg_id: str | None = None,
         event_id: str | None = None,
     ) -> Model.GuildMessage:
@@ -537,14 +528,14 @@ class API:
         修改频道 markdown 消息
 
         需要先申请权限才能使用此接口。
-        仅支持修改 Markdown 和 Keyboard 内容（与 MessageMarkdown 对象天然匹配）。
+        仅支持修改 Markdown 和 Keyboard 内容。
 
         Args:
             channel_id: 子频道 ID
             patch_msg_id: 需要修改的消息 ID
-            content: 消息内容，推荐使用 MessagesModel.MessageMarkdown
-                      - MessagesModel.MessageMarkdown: Markdown + Keyboard（推荐）
-                      - 其他类型会提取其中支持的 markdown/keyboard 字段
+            content: 消息内容
+                      - str: 纯 Markdown 文本
+                      - MessagesModel.MessageMarkdown: Markdown + Keyboard
             msg_id: 要回复的消息的 ID（被动消息）
             event_id: 要回复的事件 ID（被动消息）
 
@@ -552,6 +543,9 @@ class API:
             Model.GuildMessage: 修改后的消息对象
 
         使用示例：
+            # 使用 Markdown 字符串修改
+            await api.patch_guild_message(channel_id, msg_id, content="# 更新后的标题")
+
             # 使用 Markdown 消息对象修改
             md = MessagesModel.MessageMarkdown(content="# 更新后的标题")
             await api.patch_guild_message(channel_id, msg_id, content=md)
@@ -2634,7 +2628,6 @@ class API:
 
         注意:
             - user_openid 和 group_openid 必须提供其中之一，不能同时提供
-            - 文件大小限制：图片 10MB、视频 100MB、语音 10MB、文件 100MB
             - 建议对大文件（>10MB）使用此方法，小文件可使用 upload_media
         """
         if user_openid and group_openid:

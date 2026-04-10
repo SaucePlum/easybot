@@ -534,13 +534,15 @@ async def reply(
     | MessagesModel.MessageArk23
     | MessagesModel.MessageArk24
     | MessagesModel.MessageArk37
-    | MessagesModel.MessageMarkdown,
+    | MessagesModel.MessageMarkdown
+    | None = None,
     reference: bool = False,
     image: str | None = None,
     file_image: bytes | BinaryIO | str | None = None,
     media_file_info: str | None = None,
     msg_type: int | None = None,
     is_wakeup: bool = False,
+    channel_id: str | None = None,
 )
 ```
 
@@ -555,6 +557,7 @@ async def reply(
 | `media_file_info` | `str \| None` | `None` | 富媒体 file_info，仅群聊/QQ 单聊 v2 支持 |
 | `msg_type` | `int \| None` | `None` | 群聊/QQ 单聊 v2 消息类型，默认自动推断 |
 | `is_wakeup` | `bool` | `False` | 互动召回消息，仅 QQ 单聊 v2 支持 |
+| `channel_id` | `str \| None` | `None` | 子频道 ID。仅频道类被动事件在缺少默认目标时需要显式传入 |
 
 ### 7.2 使用示例
 
