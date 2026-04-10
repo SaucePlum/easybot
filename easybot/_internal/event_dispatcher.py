@@ -130,7 +130,12 @@ class EventDispatcher:
 
         # 3. 模型转换
         model = convert_to_model(
-            event_type, data, self._bot.api, event_id=event_id, seq=seq, opcode=opcode,
+            event_type,
+            data,
+            self._bot.api,
+            event_id=event_id,
+            seq=seq,
+            opcode=opcode,
             logger=self._logger,
         )
 
