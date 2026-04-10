@@ -706,21 +706,25 @@ class SessionManager:
                                     "msg_id 已过期（超过5分钟），且 send_reply_on_msg_id_expired=False，"
                                     "跳过发送超时回复以避免消耗主动消息配额"
                                 )
-                                return
-
-                        if isinstance(session.timeout_reply, str):
-                            params = {
-                                "content": session.timeout_reply,
-                                **session.timeout_reply_params,
-                            }
                         else:
-                            api_model_data = session.timeout_reply.build()
-                            params = {**api_model_data, **session.timeout_reply_params}
+                            if isinstance(session.timeout_reply, str):
+                                params = {
+                                    "content": session.timeout_reply,
+                                    **session.timeout_reply_params,
+                                }
+                            else:
+                                api_model_data = session.timeout_reply.build()
+                                params = {
+                                    **api_model_data,
+                                    **session.timeout_reply_params,
+                                }
 
-                        api_method = getattr(self.api, session.timeout_reply_api, None)
-                        if api_method:
-                            task = asyncio.create_task(api_method(**params))
-                            task.add_done_callback(self._on_timeout_reply_done)
+                            api_method = getattr(
+                                self.api, session.timeout_reply_api, None
+                            )
+                            if api_method:
+                                task = asyncio.create_task(api_method(**params))
+                                task.add_done_callback(self._on_timeout_reply_done)
                     except Exception as e:
                         self._logger.error(f"发送超时回复时出现错误：{e}")
 

@@ -24,6 +24,7 @@ export default defineUserConfig({
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:title', content: 'EasyBot SDK - QQ 官方机器人平台 Python SDK' }],
     ['meta', { name: 'twitter:description', content: 'QQ 官方机器人平台轻量级 Python SDK，简洁、易上手、稳定' }],
+    ['script', { src: 'https://context7.com/widget.js', 'data-library': '/sauceplum/easybot', 'data-color': '#667eea', 'data-position': 'bottom-right', 'data-placeholder': 'Ask about EasyBot SDK...' }],
   ],
 
   bundler: viteBundler({
@@ -40,7 +41,20 @@ export default defineUserConfig({
     docsDir: 'docs',
     docsBranch: 'main',
     lastUpdated: { formatOptions: { dateStyle: 'short', timeStyle: 'short' } },
+    contributors: true,
+    changelog: true,
     editLink: false,
+
+    bulletin: {
+      layout: 'top-right',
+      border: true,
+      enablePage: true,
+      lifetime: 'always',
+      id: 'qq-guild-invite',
+      title: '📢 加入交流',
+      content: 'QQ 官方机器人 Python SDK\n\n[👉 点击加入 EasyBotSDK 官方频道](https://pd.qq.com/s/b12bj8mfj?b=9)\n\n一起交流讨论，获取最新更新',
+      contentType: 'markdown',
+    },
     
     social: [
       { icon: 'github', link: 'https://github.com/SaucePlum/easybot' }
@@ -49,38 +63,32 @@ export default defineUserConfig({
     navbar: [
       { text: '首页', link: '/', icon: 'mdi:home' },
       {
-        text: '指南',
-        icon: 'mdi:book',
+        text: '开始',
+        icon: 'mdi:launch',
         items: [
           { text: '简介', link: '/01_简介', icon: 'mdi:information' },
           { text: '快速入门', link: '/02_快速入门', icon: 'mdi:play' },
         ],
       },
       {
-        text: '核心概念',
-        icon: 'mdi:lightbulb',
+        text: '文档',
+        icon: 'mdi:book-open-page-variant',
         items: [
           { text: 'SDK组件', link: '/03_SDK组件', icon: 'mdi:puzzle' },
           { text: 'API参考', link: '/04_API参考', icon: 'mdi:api' },
           { text: 'Messages Model', link: '/05_Messages_Model', icon: 'mdi:message' },
           { text: 'Model库', link: '/06_Model库', icon: 'mdi:database' },
-        ],
-      },
-      {
-        text: '进阶',
-        icon: 'mdi:rocket',
-        items: [
           { text: '插件与权限', link: '/07_插件与权限', icon: 'mdi:key' },
           { text: 'Session会话管理器', link: '/08_Session会话管理器', icon: 'mdi:account' },
         ],
       },
-      { text: '更新日志', link: '/11_更新日志', icon: 'mdi:history' },
       {
-        text: '其他',
-        icon: 'mdi:dots-horizontal',
+        text: '关于',
+        icon: 'mdi:information-outline',
         items: [
           { text: '常见问题', link: '/09_常见问题Q&A', icon: 'mdi:help-circle' },
           { text: '联系和反馈', link: '/10_联系和反馈', icon: 'mdi:email' },
+          { text: '更新日志', link: '/11_更新日志', icon: 'mdi:history' },
         ],
       },
     ],
@@ -89,36 +97,41 @@ export default defineUserConfig({
       '/': [
         {
           text: '开始',
+          icon: 'mdi:launch',
           collapsed: false,
           items: [
-            { text: '简介', link: '/01_简介' },
-            { text: '快速入门', link: '/02_快速入门' },
+            { text: '简介', link: '/01_简介', icon: 'mdi:information' },
+            { text: '快速入门', link: '/02_快速入门', icon: 'mdi:play' },
           ],
         },
         {
           text: '核心概念',
+          icon: 'mdi:lightbulb',
           collapsed: false,
           items: [
-            { text: 'SDK组件', link: '/03_SDK组件' },
-            { text: 'API参考', link: '/04_API参考' },
-            { text: 'Messages Model', link: '/05_Messages_Model' },
-            { text: 'Model库', link: '/06_Model库' },
+            { text: 'SDK组件', link: '/03_SDK组件', icon: 'mdi:puzzle' },
+            { text: 'API参考', link: '/04_API参考', icon: 'mdi:api' },
+            { text: 'Messages Model', link: '/05_Messages_Model', icon: 'mdi:message' },
+            { text: 'Model库', link: '/06_Model库', icon: 'mdi:database' },
           ],
         },
         {
           text: '进阶',
+          icon: 'mdi:rocket',
           collapsed: false,
           items: [
-            { text: '插件与权限', link: '/07_插件与权限' },
-            { text: 'Session会话管理器', link: '/08_Session会话管理器' },
+            { text: '插件与权限', link: '/07_插件与权限', icon: 'mdi:key' },
+            { text: 'Session会话管理器', link: '/08_Session会话管理器', icon: 'mdi:account' },
           ],
         },
         {
           text: '其他',
+          icon: 'mdi:dots-horizontal',
           collapsed: false,
           items: [
-            { text: '常见问题', link: '/09_常见问题Q&A' },
-            { text: '联系和反馈', link: '/10_联系和反馈' },
+            { text: '常见问题', link: '/09_常见问题Q&A', icon: 'mdi:help-circle' },
+            { text: '联系和反馈', link: '/10_联系和反馈', icon: 'mdi:email' },
+            { text: '更新日志', link: '/11_更新日志', icon: 'mdi:history' },
           ],
         },
       ],
