@@ -81,18 +81,15 @@ def main():
         # ----- 3.5 回复带网络图片的消息（仅频道） -----
         elif msg.treated_msg == "网络图片":
             await msg.reply(
-                MessagesModel.Message(
-                    content="看这张图",
-                    image="https://example.com/image.png",  # 仅频道支持
-                )
+                "看这张图",
+                image="https://example.com/image.png",
             )
 
         # ----- 3.6 回复带本地图片的消息（仅频道） -----
         elif msg.treated_msg == "本地图片":
             await msg.reply(
-                MessagesModel.Message(
-                    content="本地图片", file_image="./images/photo.jpg"  # 仅频道支持
-                )
+                "本地图片",
+                file_image="./images/photo.jpg",
             )
 
         # ----- 3.7 回复 Embed 消息 -----
@@ -154,13 +151,12 @@ def main():
         elif msg.treated_msg == "引用":
             await msg.reply("这是引用回复", reference=True)
 
-        # 方式二：使用 MessagesModel.Message 构建引用消息
-        elif msg.treated_msg == "引用构建器":
-            await msg.reply(
-                MessagesModel.Message(
-                    content="这是引用回复",
-                    message_reference_id=msg.id,
-                )
+        # 方式二：主动传入引用对象
+        elif msg.treated_msg == "引用对象":
+            await msg.api.send_guild_message(
+                channel_id=msg.channel_id,
+                content="这是引用回复",
+                message_reference_id=msg.id,
             )
 
     # ==================== 单聊消息回复示例 ====================

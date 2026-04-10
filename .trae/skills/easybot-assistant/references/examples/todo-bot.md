@@ -77,7 +77,6 @@ async def add_todo(
         return
     
     todos = await load_todos()
-    todos = load_todos()
     
     if user_key not in todos:
         todos[user_key] = []
@@ -92,7 +91,6 @@ async def add_todo(
         "priority": "normal"
     })
     await save_todos(todos)
-    save_todos(todos)
 
 @bot.on_command(command=["列表", "list"], valid_scenes=CommandValidScenes.ALL)
 async def list_todos(

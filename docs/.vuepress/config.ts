@@ -1,11 +1,11 @@
 import { viteBundler } from '@vuepress/bundler-vite'
-import { recoTheme } from 'vuepress-theme-reco'
+import { plumeTheme } from 'vuepress-theme-plume'
 import { defineUserConfig } from 'vuepress'
 
 export default defineUserConfig({
   base: '/easybot/',
   lang: 'zh-CN',
-  title: 'EasyBot SDK',
+  title: 'EasyBot SDK 帮助文档',
   description: 'QQ 官方机器人平台轻量级 Python SDK - 简洁、易上手、稳定',
 
   head: [
@@ -15,7 +15,7 @@ export default defineUserConfig({
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/easybot/logo.svg' }],
     ['link', { rel: 'apple-touch-icon', href: '/easybot/logo.svg' }],
     ['meta', { name: 'keywords', content: 'EasyBot, QQ机器人, Python SDK, QQ开放平台, 机器人开发, Python' }],
-    ['meta', { name: 'author', content: 'EasyBot Team' }],
+    ['meta', { name: 'author', content: '小念同学' }],
     ['meta', { name: 'robots', content: 'index, follow' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:title', content: 'EasyBot SDK - QQ 官方机器人平台 Python SDK' }],
@@ -34,94 +34,94 @@ export default defineUserConfig({
     },
   }),
 
-  theme: recoTheme({
+  theme: plumeTheme({
     logo: '/logo.svg',
-    repo: 'https://github.com/SaucePlum/easybot',
+    docsRepo: 'https://github.com/SaucePlum/easybot',
     docsDir: 'docs',
     docsBranch: 'main',
-    lastUpdated: true,
-    lastUpdatedText: '上次更新',
+    lastUpdated: { formatOptions: { dateStyle: 'short', timeStyle: 'short' } },
     editLink: false,
-
-    viteBundlerOptions: {
-      viteOptions: {
-        server: {
-          allowedHosts: true,
-        },
-      },
-    },
+    
+    social: [
+      { icon: 'github', link: 'https://github.com/SaucePlum/easybot' }
+    ],
 
     navbar: [
-      { text: '首页', link: '/' },
+      { text: '首页', link: '/', icon: 'mdi:home' },
       {
         text: '指南',
-        children: [
-          { text: '简介', link: '/01_简介' },
-          { text: '快速入门', link: '/02_快速入门' },
+        icon: 'mdi:book',
+        items: [
+          { text: '简介', link: '/01_简介', icon: 'mdi:information' },
+          { text: '快速入门', link: '/02_快速入门', icon: 'mdi:play' },
         ],
       },
       {
         text: '核心概念',
-        children: [
-          { text: 'SDK组件', link: '/03_SDK组件' },
-          { text: 'API参考', link: '/04_API参考' },
-          { text: 'Messages Model', link: '/05_Messages_Model' },
-          { text: 'Model库', link: '/06_Model库' },
+        icon: 'mdi:lightbulb',
+        items: [
+          { text: 'SDK组件', link: '/03_SDK组件', icon: 'mdi:puzzle' },
+          { text: 'API参考', link: '/04_API参考', icon: 'mdi:api' },
+          { text: 'Messages Model', link: '/05_Messages_Model', icon: 'mdi:message' },
+          { text: 'Model库', link: '/06_Model库', icon: 'mdi:database' },
         ],
       },
       {
         text: '进阶',
-        children: [
-          { text: '插件与权限', link: '/07_插件与权限' },
-          { text: 'Session会话管理器', link: '/08_Session会话管理器' },
+        icon: 'mdi:rocket',
+        items: [
+          { text: '插件与权限', link: '/07_插件与权限', icon: 'mdi:key' },
+          { text: 'Session会话管理器', link: '/08_Session会话管理器', icon: 'mdi:account' },
         ],
       },
+      { text: '更新日志', link: '/11_更新日志', icon: 'mdi:history' },
       {
         text: '其他',
-        children: [
-          { text: '常见问题', link: '/09_常见问题Q&A' },
-          { text: '联系和反馈', link: '/10_联系和反馈' },
+        icon: 'mdi:dots-horizontal',
+        items: [
+          { text: '常见问题', link: '/09_常见问题Q&A', icon: 'mdi:help-circle' },
+          { text: '联系和反馈', link: '/10_联系和反馈', icon: 'mdi:email' },
         ],
       },
     ],
 
-    series: {
+    sidebar: {
       '/': [
         {
           text: '开始',
-          children: [
-            '/01_简介',
-            '/02_快速入门',
+          collapsed: false,
+          items: [
+            { text: '简介', link: '/01_简介' },
+            { text: '快速入门', link: '/02_快速入门' },
           ],
         },
         {
           text: '核心概念',
-          children: [
-            '/03_SDK组件',
-            '/04_API参考',
-            '/05_Messages_Model',
-            '/06_Model库',
+          collapsed: false,
+          items: [
+            { text: 'SDK组件', link: '/03_SDK组件' },
+            { text: 'API参考', link: '/04_API参考' },
+            { text: 'Messages Model', link: '/05_Messages_Model' },
+            { text: 'Model库', link: '/06_Model库' },
           ],
         },
         {
           text: '进阶',
-          children: [
-            '/07_插件与权限',
-            '/08_Session会话管理器',
+          collapsed: false,
+          items: [
+            { text: '插件与权限', link: '/07_插件与权限' },
+            { text: 'Session会话管理器', link: '/08_Session会话管理器' },
           ],
         },
         {
           text: '其他',
-          children: [
-            '/09_常见问题Q&A',
-            '/10_联系和反馈',
+          collapsed: false,
+          items: [
+            { text: '常见问题', link: '/09_常见问题Q&A' },
+            { text: '联系和反馈', link: '/10_联系和反馈' },
           ],
         },
       ],
     },
-
-    tip: '提示',
-    warning: '注意',
-    danger: '警告',
   }),
 })

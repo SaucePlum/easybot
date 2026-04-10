@@ -181,13 +181,14 @@ await bot.api.send_guild_message(channel_id="xxx", content="有效内容")
 # 错误：群聊纯图片
 await bot.api.send_group_message(
     group_openid="xxx",
-    content=MessagesModel.Message(image="url")  # 群聊必须有文本
+    media_file_info="file_info_only"  # 群聊普通消息路径必须有文本
 )
 
 # 解决：添加文本
 await bot.api.send_group_message(
     group_openid="xxx",
-    content=MessagesModel.Message(content="图片", image="url")
+    content="图片",
+    media_file_info="file_info_value",
 )
 ```
 

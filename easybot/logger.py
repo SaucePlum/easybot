@@ -166,10 +166,10 @@ class LoggerManager:
         bot_log_dir = base_dir / self._bot_id
         bot_log_dir.mkdir(parents=True, exist_ok=True)
 
-        log_filename = bot_log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
-        handler_key = str(log_filename)
+        handler_key = f"{self._bot_id}:{self._log_dir or 'default'}"
 
         if handler_key not in LoggerManager._file_handlers:
+            log_filename = bot_log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.log"
             handler = TimedRotatingFileHandler(
                 str(log_filename),
                 when="midnight",

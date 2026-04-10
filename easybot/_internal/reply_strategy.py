@@ -6,7 +6,7 @@ EasyBot SDK 回复策略模块
 
 被动回复参数说明：
 - msg_id 和 event_id 任填一个即为被动消息
-- 本模块统一使用 event_id（来自 Payload.id），适用于所有支持被动回复的事件
+- 本模块优先使用 msg_id；仅当事件没有 msg_id 时才回退到 event_id
 
 支持的被动回复事件类型（共 22 个）：
 - 频道: AT_MESSAGE_CREATE, MESSAGE_CREATE, DIRECT_MESSAGE_CREATE,
@@ -18,7 +18,7 @@ EasyBot SDK 回复策略模块
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, BinaryIO
 
 if TYPE_CHECKING:
     from ..api import API
@@ -35,25 +35,29 @@ class ReplyStrategy(ABC):
     @abstractmethod
     async def reply(
         self,
-        content: Union[
-            str,
-            "MessagesModel.Message",
-            "MessagesModel.MessageEmbed",
-            "MessagesModel.MessageArk23",
-            "MessagesModel.MessageArk24",
-            "MessagesModel.MessageArk37",
-            "MessagesModel.MessageMarkdown",
-        ],
+        content: "str | MessagesModel.Message | MessagesModel.MessageEmbed | MessagesModel.MessageArk23 | MessagesModel.MessageArk24 | MessagesModel.MessageArk37 | MessagesModel.MessageMarkdown | None" = None,
         reference: bool = False,
         msg_seq: int = 1,
+        image: str | None = None,
+        file_image: bytes | BinaryIO | str | None = None,
+        media_file_info: str | None = None,
+        msg_type: int | None = None,
+        is_wakeup: bool = False,
+        channel_id: str | None = None,
     ):
         """
         发送回复消息
 
         Args:
-            content: 消息内容
+            content: 消息内容，支持文本、普通消息构建器或结构化消息构建器
             reference: 是否引用原消息
             msg_seq: 消息序号（群聊/单聊使用）
+            image: 图片 URL（普通消息）
+            file_image: 图片数据（普通消息）
+            media_file_info: 富媒体文件信息（群聊/单聊 v2）
+            msg_type: 消息类型
+            is_wakeup: 是否发送互动召回消息
+            channel_id: 子频道 ID（仅频道场景使用，用于指定回复目标）
 
         Returns:
             发送结果
@@ -76,8 +80,9 @@ class UnifiedReplyStrategy(ReplyStrategy):
     - 消息类事件（有 msg_id）→ 优先使用 msg_id，兼容官方可能的消息类专属限制
     - 非消息类事件（无 msg_id）→ 使用 event_id
 
-    引用回复说明（message_reference）：
-    所有场景都使用 MessageReference 对象格式：{message_id, ignore_get_message_error}
+    引用回复说明：
+    - 公开 reply() 继续使用 reference=True 语义
+    - reply_strategy 内部统一转成发送 API 所需的引用参数
     """
 
     def __init__(
@@ -99,26 +104,32 @@ class UnifiedReplyStrategy(ReplyStrategy):
         content,
         reference=False,
         msg_seq=1,
+        image: str | None = None,
+        file_image: bytes | BinaryIO | str | None = None,
+        media_file_info: str | None = None,
+        msg_type: int | None = None,
+        is_wakeup: bool = False,
         channel_id: str | None = None,
     ):
         """
         发送回复消息
 
         Args:
-            content: 消息内容
+            content: 消息内容，支持文本、普通消息构建器或结构化消息构建器
             reference: 是否引用原消息（引用回复）
             msg_seq: 消息序号（群聊/单聊使用）
+            image: 图片 URL（普通消息）
+            file_image: 图片数据（普通消息）
+            media_file_info: 富媒体文件信息（群聊/单聊 v2）
+            msg_type: 消息类型，默认按内容自动推断
+            is_wakeup: 是否发送互动召回消息（仅 QQ 单聊 v2）
             channel_id: 子频道 ID（仅频道场景使用，用于指定回复目标）
 
         Returns:
             发送结果
 
-        Note:
-            引用回复（reference=True）时：
-            - 群聊/单聊：使用布尔格式的 message_reference
-            - 频道/私信：使用对象格式的 message_reference
         """
-        reference_id = self._msg_id if reference else None
+        message_reference_id = self._msg_id if reference and self._msg_id else None
 
         match self._scene:
             case "guild":
@@ -131,38 +142,47 @@ class UnifiedReplyStrategy(ReplyStrategy):
                 return await self._api.send_guild_message(
                     channel_id=target,
                     content=content,
+                    image=image,
+                    file_image=file_image,
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
-                    message_reference_id=reference_id,
+                    message_reference_id=message_reference_id,
                 )
 
             case "direct":
                 return await self._api.send_direct_message(
                     guild_id=self._locator,
                     content=content,
+                    image=image,
+                    file_image=file_image,
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
-                    message_reference_id=reference_id,
+                    message_reference_id=message_reference_id,
                 )
 
             case "group":
                 return await self._api.send_group_message(
                     group_openid=self._locator,
                     content=content,
+                    media_file_info=media_file_info,
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
+                    msg_type=msg_type,
                     msg_seq=msg_seq,
-                    message_reference_id=reference_id,
+                    message_reference_id=message_reference_id,
                 )
 
             case "c2c":
                 return await self._api.send_c2c_message(
                     openid=self._locator,
                     content=content,
+                    media_file_info=media_file_info,
                     msg_id=self._msg_id or None,
                     event_id=self._event_id if not self._msg_id else None,
+                    msg_type=msg_type,
                     msg_seq=msg_seq,
-                    message_reference_id=reference_id,
+                    is_wakeup=is_wakeup,
+                    message_reference_id=message_reference_id,
                 )
 
             case _:

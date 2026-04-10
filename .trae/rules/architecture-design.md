@@ -30,7 +30,7 @@ easybot/
     ├── http_client.py   # HTTP 客户端封装
     ├── ws_client.py     # WebSocket 客户端
     ├── ws_base.py       # WebSocket 基类
-    ├── event_dispatcher.py  # 事件分发器
+    ├── event_dispatcher.py  # 事件分发器（含 Semaphore 并发控制）
     ├── event_utils.py   # 事件处理工具
     ├── message_utils.py # 消息处理工具
     ├── intent.py        # Intent 计算和管理
@@ -193,6 +193,7 @@ bot = Bot(
     auto_load_plugins=False,
     plugins_dir="plugins",
     plugins_recursive=False,
+    max_concurrency=64,
 )
 ```
 

@@ -7,7 +7,7 @@ EasyBot SDK 协议模块
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ._internal.http_client import WebhookServer
 from ._internal.ws_client import RemoteWebhookClient, WebSocketClient
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class Protocol(ABC):
     """协议基类"""
 
-    _client: Any = None
+    _client: WebSocketClient | WebhookServer | RemoteWebhookClient | None = None
 
     @abstractmethod
     async def run(self, bot: "Bot"):
@@ -56,7 +56,7 @@ class WebSocketProtocol(Protocol):
     total_shard: int = 1
     disable_reconnect_on_not_recv_msg: float = 1000
     connect_timeout: float = 30.0
-    _client: Any = field(default=None, repr=False, compare=False)
+    _client: WebSocketClient | None = field(default=None, repr=False, compare=False)
 
     async def run(self, bot: "Bot"):
         """运行 WebSocket 连接"""
@@ -80,7 +80,7 @@ class WebhookProtocol(Protocol):
     path: str = "/"
     path_to_ssl_cert: str | None = None
     path_to_ssl_cert_key: str | None = None
-    _client: Any = field(default=None, repr=False, compare=False)
+    _client: WebhookServer | None = field(default=None, repr=False, compare=False)
 
     @property
     def webhook_path(self) -> str:
@@ -130,7 +130,7 @@ class RemoteWebhookProtocol(Protocol):
     connect_timeout: float = 15.0
     heartbeat_interval: float = 40.0
     no_msg_timeout: float = 180.0
-    _client: Any = field(default=None, repr=False, compare=False)
+    _client: RemoteWebhookClient | None = field(default=None, repr=False, compare=False)
 
     @property
     def ws_url(self) -> str:

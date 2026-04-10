@@ -17,8 +17,8 @@ MessagesModel 提供多种消息构建器，用于构造不同类型的消息内
 
 | 需求 | 推荐类型 | 说明 |
 |------|---------|------|
-| 简单文本回复 | `Message` | 最简单直接 |
-| 文本 + 图片 | `Message(image=...)` | 一行代码搞定 |
+| 简单文本回复 | `str` | 直接通过发送接口传入 |
+| 文本 + 图片 | `Message` 或接口参数 `image` / `file_image` | 普通消息既可直接传参，也可显式构建 |
 | 结构化信息展示 | `MessageEmbed` | 清晰的字段布局 |
 | 导航/链接列表 | `MessageArk23` | 多行可点击链接 |
 | 推广/资讯卡片 | `MessageArk24/37` | 视觉吸引力强 |
@@ -28,29 +28,44 @@ MessagesModel 提供多种消息构建器，用于构造不同类型的消息内
 
 | 构建器 | 类名 | msg_type | 适用场景 |
 |--------|------|----------|---------|
-| 文本消息 | `Message` | 0 / 7 | 基础文本、图片、引用回复 |
+| 普通消息 | `Message` | 0 / 7 | 文本、图片、富媒体 |
 | Embed 卡片 | `MessageEmbed` | 4 | 结构化信息展示 |
 | Ark 23 链接列表 | `MessageArk23` | 3 | 多行链接列表 |
 | Ark 24 图文卡片 | `MessageArk24` | 3 | 标题+描述+缩略图 |
 | Ark 37 大图卡片 | `MessageArk37` | 3 | 大图展示模板 |
 | Markdown | `MessageMarkdown` | 2 | 富文本格式消息 |
 
+### 1.3 官方接口视角速查
+
+| 场景 | 发送接口 | 常用消息类型 | 图片/富媒体方式 | 特别限制 |
+|------|----------|--------------|-----------------|----------|
+| 频道消息 | `send_guild_message()` | `str/Message/Embed/Ark/Markdown` | `image` 或 `file_image` | 支持引用回复 |
+| 频道私信 | `send_direct_message()` | `str/Message/Embed/Ark/Markdown` | `image` 或 `file_image` | 支持引用回复 |
+| 群聊 v2 | `send_group_message()` | `str/Message/Embed/Ark/Markdown` | `media_file_info` | 普通消息路径必须有文本内容，SDK 自动补 `msg_type` |
+| QQ 单聊 v2 | `send_c2c_message()` | `str/Message/Embed/Ark/Markdown` | `media_file_info` | SDK 自动补 `msg_type`，`is_wakeup` 仅此场景可用 |
+
+| 普通消息参数形态 | 官方字段方向 | 推荐场景 |
+|------------------|--------------|----------|
+| `content="文本"` | `content + msg_type=0` | 四种发送场景 |
+| `image="https://..."` | 顶级 `image` | 频道消息、频道私信 |
+| `file_image=...` | multipart `file_image` | 频道消息、频道私信 |
+| `media_file_info=...` | `media.file_info + msg_type=7` | 群聊 v2、QQ 单聊 v2 |
+| `is_wakeup=True` | 顶级 `is_wakeup` | 仅 QQ 单聊 v2 |
+
 ---
 
 ## 二、Message — 普通消息
 
-最基础的消息类型，支持文本、图片、引用回复和富媒体。
+`MessagesModel.Message` 是普通消息构建器，用于构建文本、图片和富媒体消息体。普通消息也支持直接通过发送接口或 `reply()` 平铺传参，SDK 内部会统一归一为 `MessagesModel.Message`。
 
 ### 2.1 构造参数
 
 ```python
 MessagesModel.Message(
-    content: str | int | float | None = None,   # 消息文本
-    image: str | None = None,                    # 网络图片 URL
-    file_image: bytes | BinaryIO | str | None = None,  # 本地图片
-    media_file_info: str | None = None,          # 富媒体 file_info
-    message_reference_id: str | None = None,     # 引用回复的消息 ID
-    ignore_message_reference_error: bool = False,# 忽略引用错误
+    content: str | int | float | None = None,
+    image: str | None = None,
+    file_image: bytes | BinaryIO | str | None = None,
+    media_file_info: str | None = None,
 )
 ```
 
@@ -70,6 +85,7 @@ msg = MessagesModel.Message(
     content="看看这张图",
     image="https://example.com/image.png",
 )
+await bot.api.send_guild_message(channel_id="xxx", content=msg)
 ```
 
 **文本 + 本地图片**：
@@ -77,9 +93,11 @@ msg = MessagesModel.Message(
 ```python
 # 方式1：文件路径
 msg = MessagesModel.Message(content="本地图片", file_image="./photo.png")
+await bot.api.send_guild_message(channel_id="xxx", content=msg)
 
 # 方式2：bytes 数据
 msg = MessagesModel.Message(content="Bytes图片", file_image=image_bytes)
+await bot.api.send_guild_message(channel_id="xxx", content=msg)
 ```
 **引用回复**：
 
@@ -88,12 +106,18 @@ msg = MessagesModel.Message(content="Bytes图片", file_image=image_bytes)
 # 适用于所有场景（频道/群聊/单聊/私信）
 await msg.reply("我同意你的观点", reference=True)
 
-# 方式二：使用 MessagesModel.Message 构建引用消息
-msg = MessagesModel.Message(
+# 方式二：主动发送时使用拆分引用参数
+await bot.api.send_guild_message(
+    channel_id="xxx",
     content="我同意你的观点",
     message_reference_id=msg.id,
 )
-await msg.reply(msg)
+```
+
+**单聊互动召回消息**：
+
+```python
+await bot.api.send_c2c_message(openid="xxx", content="回来看看我吧", is_wakeup=True)
 ```
 
 ### 2.3 注意事项
@@ -113,12 +137,15 @@ msg = MessagesModel.Message(
     content="图片消息",
     media_file_info=file_info.file_info,
 )
+await bot.api.send_group_message(group_openid="xxx", content=msg)
 ```
 
 **注意事项**：
-- `image` 和 `file_image` 不能同时使用
-- `media_file_info` 与 `image`/`file_image` 互斥
+- `MessagesModel.Message` 中 `media_file_info` 与 `image`/`file_image` 互斥
 - `file_image` 仅适用于**频道消息**；群聊/单聊需使用 `media_file_info`
+- `is_wakeup` 仅适用于 **QQ 单聊 v2 接口**，且官方要求与 `msg_id`、`event_id` 互斥
+- 同时传入 `image` 和 `file_image` 时，当前 SDK 实现会优先使用 `image`
+- 频道消息接口支持 `image` 或 `file_image` 发送图片；其中 `file_image` 属于 multipart/form-data 上传方式
 
 ---
 
@@ -283,13 +310,17 @@ await bot.api.send_guild_message(channel_id="xxx", content=ark)
 MessagesModel.MessageMarkdown(
     content: str | None = None,                          # 原生 Markdown 内容
     template_id: str | None = None,                       # 模板 ID（与 content 二选一）
-    key_values: dict[str, str | list[str]] | list[dict] | None = None,  # 模板参数
-    keyboard_id: str | None = None,                       # Keyboard 模板 ID
-    keyboard_content: dict | None = None,                  # 自定义 Keyboard 内容
+    key_values: dict[str, str | list[str]] | list[dict] | None = None,  # 模板参数（模板方式必填）
+    keyboard_id: str | None = None,                       # Keyboard 模板 ID（与 keyboard_content 二选一）
+    keyboard_content: dict | None = None,                  # 自定义 Keyboard 内容（与 keyboard_id 二选一）
 )
 ```
 
-**约束**: `content` 和 `template_id` 不可同时存在。
+**约束**：
+- `content` 和 `template_id` 不可同时存在
+- 必须提供 `content` 或 `template_id` 其中之一
+- 使用 `template_id` 时必须提供 `key_values`
+- `keyboard_id` 和 `keyboard_content` 应二选一
 
 ### 7.2 原生 Markdown
 
@@ -544,7 +575,7 @@ cmd_text = Builders.TextChainBuilder.cmd_input("/reply", reference=True)
 
 **参数**：
 - `text` (str): 点击后插入输入框的文本，最多 100 字符
-- `show` (str | None): 用户在消息内看到的文本，默认取 `text` 值，最多 100 字符
+- `show` (str | None): 用户在消息内看到的文本；不传时 SDK 不会输出 `show` 属性，最多 100 字符
 - `reference` (bool): 插入输入框时是否带消息原文回复引用，默认 `False`
 
 **返回**: `str` - 参数指令标签
@@ -587,21 +618,39 @@ emoji_text = Builders.TextChainBuilder.emoji("123")
 
 ## 十、在不同场景中使用
 
-所有消息构建器均可在以下 API 中使用：
+### 10.1 按发送场景对照
+
+| 场景 | 允许的构建器 | 图片发送方式 | 富媒体发送方式 | 其他说明 |
+|------|--------------|--------------|----------------|----------|
+| 频道消息 | `str/Embed/Ark/Markdown` | `image`、`file_image` | 不支持 `media_file_info` | 支持 `message_reference` |
+| 频道私信 | `str/Embed/Ark/Markdown` | `image`、`file_image` | 不支持 `media_file_info` | 支持 `message_reference` |
+| 群聊 v2 | `str/Embed/Ark/Markdown` | 不支持 `image`、`file_image` | `media_file_info` | 普通消息路径必须有文本内容 |
+| QQ 单聊 v2 | `str/Embed/Ark/Markdown` | 不支持 `image`、`file_image` | `media_file_info` | 支持 `is_wakeup=True` |
+
+### 10.2 官方字段映射理解
 
 ```python
-# 频道消息 — 支持所有类型
-await bot.api.send_guild_message(channel_id="xxx", content=任意消息对象)
+# 频道消息 / 频道私信
+await bot.api.send_guild_message(channel_id="xxx", content="文本", image="https://...")
+await bot.api.send_guild_message(channel_id="xxx", content="文本", file_image="./image.png")
 
-# 群聊消息 — 支持 Message/Embed/Ark/Markdown
-await bot.api.send_group_message(group_openid="xxx", content=任意消息对象)
+# 群聊 / QQ 单聊 v2
+await bot.api.send_group_message(
+    group_openid="xxx",
+    content="文本",
+    media_file_info=file_info.file_info,
+)
 
-# 单聊消息 — 支持 Message/Embed/Ark/Markdown
-await bot.api.send_c2c_message(openid="xxx", content=任意消息对象)
-
-# 频道私信 — 支持 Message/Embed/Ark/Markdown
-await bot.api.send_direct_message(guild_id="xxx", content=md)
+# QQ 单聊 v2 互动召回
+await bot.api.send_c2c_message(openid="xxx", content="回来看看我吧", is_wakeup=True)
 ```
+
+**补充说明**：
+
+- 群聊和 QQ 单聊 v2 由 SDK 自动补 `msg_type`
+- `media_file_info` 与 `image` / `file_image` 互斥
+- `is_wakeup=True` 仅适用于 QQ 单聊 v2，且与 `msg_id`、`event_id` 互斥
+- 当前 SDK 对频道消息和频道私信统一支持 `message_reference`
 
 ---
 

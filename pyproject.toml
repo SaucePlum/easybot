@@ -82,6 +82,10 @@ exclude = '''
 )/
 '''
 
+[tool.isort]
+profile = "black"
+line_length = 88
+
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = false

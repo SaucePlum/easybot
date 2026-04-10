@@ -40,10 +40,8 @@ def main() -> None:
         # ----- 发送带图片的消息（仅频道支持 image/file_image） -----
         elif msg.treated_msg == "发送图片":
             result = await msg.reply(
-                MessagesModel.Message(
-                    content="看这张图",
-                    file_image="./images/photo.png",
-                )
+                "看这张图",
+                file_image="./images/photo.png",
             )
             bot.logger.info(f"图片消息发送成功，ID: {result.id}")
 
@@ -96,10 +94,8 @@ def main() -> None:
 
                 # 步骤2：发送引用图片的消息
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="群聊图片",
-                        media_file_info=upload_result.file_info,
-                    )
+                    "群聊图片",
+                    media_file_info=upload_result.file_info,
                 )
             except Exception as e:
                 bot.logger.error(f"发送图片失败: {e}")
@@ -134,10 +130,8 @@ def main() -> None:
 
                 # 步骤2：发送引用图片的消息
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="私信图片",
-                        media_file_info=upload_result.file_info,
-                    )
+                    "私信图片",
+                    media_file_info=upload_result.file_info,
                 )
             except Exception as e:
                 bot.logger.error(f"发送图片失败: {e}")

@@ -13,7 +13,7 @@ EasyBot SDK 数据模型模块
 
 from dataclasses import MISSING, dataclass, field
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any, ClassVar, Optional, TypeAlias, TypeVar, Union
+from typing import TYPE_CHECKING, Any, BinaryIO, ClassVar, TypeAlias, TypeVar
 
 if TYPE_CHECKING:
     from ._internal.reply_strategy import ReplyStrategy
@@ -127,7 +127,7 @@ class BaseModel:
     _msg_seq: int = field(default=1, repr=False, compare=False)
 
     event_id: str = field(default="", repr=False, compare=False)
-    seq: Optional[int] = field(default=None, repr=False, compare=False)
+    seq: int | None = field(default=None, repr=False, compare=False)
     opcode: int = field(default=0, repr=False, compare=False)
     event_type: str = field(default="", repr=False, compare=False)
 
@@ -225,15 +225,27 @@ class BaseModel:
 
     async def reply(
         self,
-        content: "Union[str, MessagesModel.Message, MessagesModel.MessageEmbed, MessagesModel.MessageArk23, MessagesModel.MessageArk24, MessagesModel.MessageArk37, MessagesModel.MessageMarkdown]",
+        content: "str | MessagesModel.Message | MessagesModel.MessageEmbed | MessagesModel.MessageArk23 | MessagesModel.MessageArk24 | MessagesModel.MessageArk37 | MessagesModel.MessageMarkdown | None" = None,
         reference: bool = False,
+        image: str | None = None,
+        file_image: bytes | BinaryIO | str | None = None,
+        media_file_info: str | None = None,
+        msg_type: int | None = None,
+        is_wakeup: bool = False,
+        channel_id: str | None = None,
     ):
         """
         回复消息
 
         Args:
-            content: 消息内容，支持文本或 MessagesModel 构建器
+            content: 消息内容，支持文本、普通消息构建器或结构化消息构建器
             reference: 是否引用原消息
+            image: 图片 URL（普通消息）
+            file_image: 图片数据，支持 bytes、BinaryIO 或文件路径（普通消息）
+            media_file_info: 富媒体文件信息（群聊/单聊 v2）
+            msg_type: 消息类型，默认按内容自动推断
+            is_wakeup: 是否发送互动召回消息（仅 QQ 单聊 v2）
+            channel_id: 子频道 ID。仅频道类被动事件在缺少默认目标时需要显式传入
 
         Returns:
             发送结果模型
@@ -248,16 +260,28 @@ class BaseModel:
             # Embed 消息
             await msg.reply(MessagesModel.MessageEmbed(title="标题"))
 
+            # 普通图片回复
+            await msg.reply("图片", image="https://example.com/image.png")
+
             # 带引用回复
             await msg.reply("回复你", reference=True)
+
+            # 成员事件等无默认子频道的频道事件
+            await msg.reply("欢迎加入", channel_id="目标子频道ID")
         """
         if self._reply_strategy is None:
-            raise RuntimeError("此模型不支持回复操作，仅支持消息事件模型")
+            raise RuntimeError("此模型不支持回复操作")
 
         result = await self._reply_strategy.reply(
             content,
             reference=reference,
             msg_seq=self._msg_seq,
+            image=image,
+            file_image=file_image,
+            media_file_info=media_file_info,
+            msg_type=msg_type,
+            is_wakeup=is_wakeup,
+            channel_id=channel_id,
         )
         self._msg_seq += 1
         return result
@@ -304,10 +328,10 @@ class Author(BaseModel):
     username: str = ""
     avatar: str = ""
     bot: bool = False
-    member_openid: Optional[str] = None
-    user_openid: Optional[str] = None
-    union_openid: Optional[str] = None
-    union_user_account: Optional[str] = None
+    member_openid: str | None = None
+    user_openid: str | None = None
+    union_openid: str | None = None
+    union_user_account: str | None = None
 
 
 @dataclass
@@ -436,7 +460,7 @@ class Thread(BaseModel):
     guild_id: str = ""
     channel_id: str = ""
     author_id: str = ""
-    thread_info: Optional["ThreadInfo"] = None
+    thread_info: "ThreadInfo | None" = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "Thread":
@@ -491,7 +515,7 @@ class ThreadDetail(BaseModel):
     用于获取帖子详情 API。
     """
 
-    thread: Optional["Thread"] = None
+    thread: "Thread | None" = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ThreadDetail":
@@ -519,30 +543,6 @@ class ThreadInfo(BaseModel):
     title: str = ""
     content: str = ""
     date_time: str = ""
-
-
-class AuditType(IntEnum):
-    """
-    审核类型枚举
-
-    用于论坛审核事件。
-    """
-
-    PUBLISH_THREAD = 1
-    PUBLISH_POST = 2
-    PUBLISH_REPLY = 3
-
-
-class AtType(IntEnum):
-    """
-    @类型枚举
-
-    用于富文本 @ 内容。
-    """
-
-    AT_EXPLICIT_USER = 1
-    AT_ROLE_GROUP = 2
-    AT_GUILD = 3
 
 
 class Alignment(IntEnum):
@@ -614,9 +614,13 @@ class AtInfo(BaseModel):
     """
 
     type: int = 0
-    user_info: Optional[AtUserInfo] = None
-    role_info: Optional[AtRoleInfo] = None
-    guild_info: Optional[AtGuildInfo] = None
+    user_info: AtUserInfo | None = None
+    role_info: AtRoleInfo | None = None
+    guild_info: AtGuildInfo | None = None
+
+    TYPE_EXPLICIT_USER: ClassVar[int] = 1
+    TYPE_ROLE_GROUP: ClassVar[int] = 2
+    TYPE_GUILD: ClassVar[int] = 3
 
     @classmethod
     def from_dict(cls, data: dict) -> "AtInfo":
@@ -688,11 +692,11 @@ class RichText(BaseModel):
     """
 
     type: int = 0
-    text_info: Optional[TextInfo] = None
-    at_info: Optional[AtInfo] = None
-    url_info: Optional[URLInfo] = None
-    emoji_info: Optional[EmojiInfo] = None
-    channel_info: Optional[ChannelInfo] = None
+    text_info: TextInfo | None = None
+    at_info: AtInfo | None = None
+    url_info: URLInfo | None = None
+    emoji_info: EmojiInfo | None = None
+    channel_info: ChannelInfo | None = None
 
     TYPE_TEXT: ClassVar[int] = 1
     TYPE_AT: ClassVar[int] = 2
@@ -768,7 +772,7 @@ class ThreadContentText(BaseModel):
     """
 
     text: str = ""
-    props: Optional[TextProps] = None
+    props: TextProps | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ThreadContentText":
@@ -836,7 +840,7 @@ class ThreadContentPlatVideo(BaseModel):
     height: int = 0
     video_id: str = ""
     duration: int = 0
-    cover: Optional["ThreadContentPlatImage"] = None
+    cover: "ThreadContentPlatImage | None" = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ThreadContentPlatVideo":
@@ -866,7 +870,7 @@ class ThreadContentVideo(BaseModel):
     """
 
     third_url: str = ""
-    plat_video: Optional["ThreadContentPlatVideo"] = None
+    plat_video: "ThreadContentPlatVideo | None" = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ThreadContentVideo":
@@ -896,10 +900,10 @@ class ThreadContentElem(BaseModel):
     """
 
     type: int = 1
-    text: Optional["ThreadContentText"] = None
-    image: Optional["ThreadContentImage"] = None
-    video: Optional["ThreadContentVideo"] = None
-    url: Optional["ThreadContentUrl"] = None
+    text: "ThreadContentText | None" = None
+    image: "ThreadContentImage | None" = None
+    video: "ThreadContentVideo | None" = None
+    url: "ThreadContentUrl | None" = None
 
     TYPE_TEXT: ClassVar[int] = 1
     TYPE_IMAGE: ClassVar[int] = 2
@@ -942,7 +946,7 @@ class ThreadContentParagraph(BaseModel):
     """
 
     elems: list["ThreadContentElem"] = field(default_factory=list)
-    props: Optional[ParagraphProps] = None
+    props: ParagraphProps | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "ThreadContentParagraph":
@@ -996,273 +1000,13 @@ class Attachment(BaseModel):
     """
 
     url: str = ""
-    content_type: Optional[str] = None
-    filename: Optional[str] = None
-    height: Optional[int] = None
-    width: Optional[int] = None
-    size: Optional[int] = None
-    voice_wav_url: Optional[str] = None
-    asr_refer_text: Optional[str] = None
-
-
-@dataclass
-class MessageEmbedThumbnail(BaseModel):
-    """Embed 缩略图"""
-
-    url: str = ""
-
-
-@dataclass
-class MessageEmbedField(BaseModel):
-    """Embed 字段"""
-
-    name: str = ""
-
-
-@dataclass
-class MessageEmbed(BaseModel):
-    """
-    Embed 消息对象
-
-    用于发送 Embed 格式的消息。
-    """
-
-    title: str = ""
-    prompt: str = ""
-    thumbnail: Optional[MessageEmbedThumbnail] = None
-    fields: list[MessageEmbedField] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "MessageEmbed":
-        if data is None:
-            return None
-
-        thumbnail_data = data.get("thumbnail")
-        thumbnail = (
-            MessageEmbedThumbnail.from_dict(thumbnail_data) if thumbnail_data else None
-        )
-
-        fields_data = data.get("fields", [])
-        fields = [MessageEmbedField.from_dict(f) for f in fields_data if f]
-
-        return cls(
-            title=data.get("title", ""),
-            prompt=data.get("prompt", ""),
-            thumbnail=thumbnail,
-            fields=fields,
-            _raw_data=data,
-        )
-
-
-@dataclass
-class MessageArkObjKv(BaseModel):
-    """Ark ObjKv 对象"""
-
-    key: str = ""
-    value: str = ""
-
-
-@dataclass
-class MessageArkObj(BaseModel):
-    """Ark Obj 对象"""
-
-    obj_kv: list[MessageArkObjKv] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "MessageArkObj":
-        if data is None:
-            return None
-
-        obj_kv_data = data.get("obj_kv", [])
-        obj_kv = [MessageArkObjKv.from_dict(kv) for kv in obj_kv_data if kv]
-
-        return cls(obj_kv=obj_kv, _raw_data=data)
-
-
-@dataclass
-class MessageArkKv(BaseModel):
-    """Ark Kv 对象"""
-
-    key: str = ""
-    value: str = ""
-    obj: list[MessageArkObj] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "MessageArkKv":
-        if data is None:
-            return None
-
-        obj_data = data.get("obj", [])
-        obj = [MessageArkObj.from_dict(o) for o in obj_data if o]
-
-        return cls(
-            key=data.get("key", ""),
-            value=data.get("value", ""),
-            obj=obj,
-            _raw_data=data,
-        )
-
-
-@dataclass
-class MessageArk(BaseModel):
-    """
-    Ark 消息对象
-
-    用于发送 Ark 模板消息。
-    """
-
-    template_id: int = 0
-    kv: list[MessageArkKv] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "MessageArk":
-        if data is None:
-            return None
-
-        kv_data = data.get("kv", [])
-        kv = [MessageArkKv.from_dict(k) for k in kv_data if k]
-
-        return cls(
-            template_id=data.get("template_id", 0),
-            kv=kv,
-            _raw_data=data,
-        )
-
-
-@dataclass
-class MessageReference(BaseModel):
-    """
-    引用消息对象
-
-    用于回复/引用消息。
-    """
-
-    message_id: str = ""
-    ignore_get_message_error: bool = False
-
-
-@dataclass
-class MessageMarkdownParams(BaseModel):
-    """Markdown 模板参数"""
-
-    key: str = ""
-    values: list[str] = field(default_factory=list)
-
-
-@dataclass
-class MessageMarkdown(BaseModel):
-    """
-    Markdown 消息对象
-
-    用于发送 Markdown 格式的消息。
-    支持模板和原生内容两种方式。
-    """
-
-    template_id: int | None = None
-    custom_template_id: str | None = None
-    params: list[MessageMarkdownParams] = field(default_factory=list)
-    content: str | None = None
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "MessageMarkdown":
-        if data is None:
-            return None
-
-        params_data = data.get("params", [])
-        params = [MessageMarkdownParams.from_dict(p) for p in params_data if p]
-
-        return cls(
-            template_id=data.get("template_id"),
-            custom_template_id=data.get("custom_template_id"),
-            params=params,
-            content=data.get("content"),
-            _raw_data=data,
-        )
-
-
-@dataclass
-class MessageButtonRenderData(BaseModel):
-    """按钮渲染数据"""
-
-    label: str = ""
-    visited_label: str = ""
-    style: int = 0
-
-
-@dataclass
-class MessageButtonPermission(BaseModel):
-    """
-    按钮权限
-
-    用于控制按钮的可见性和操作权限。
-    """
-
-    type: int = 0
-    specify_user_ids: list[str] = field(default_factory=list)
-
-    TYPE_SPECIFY_USER: ClassVar[int] = 0
-    TYPE_ADMIN_ONLY: ClassVar[int] = 1
-    TYPE_ALL: ClassVar[int] = 2
-    TYPE_SPECIFY_ROLE: ClassVar[int] = 3
-
-
-@dataclass
-class MessageButtonAction(BaseModel):
-    """按钮动作"""
-
-    type: int = 0
-    data: str = ""
-    reply: bool = False
-    enter: bool = False
-    permission: Optional[MessageButtonPermission] = None
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "MessageButtonAction":
-        if data is None:
-            return None
-
-        perm_data = data.get("permission")
-        permission = MessageButtonPermission.from_dict(perm_data) if perm_data else None
-
-        return cls(
-            type=data.get("type", 0),
-            data=data.get("data", ""),
-            reply=data.get("reply", False),
-            enter=data.get("enter", False),
-            permission=permission,
-            _raw_data=data,
-        )
-
-
-@dataclass
-class MessageButton(BaseModel):
-    """消息按钮"""
-
-    id: Optional[str] = None
-    render_data: Optional[MessageButtonRenderData] = None
-    action: Optional[MessageButtonAction] = None
-
-
-@dataclass
-class MessageKeyboardRow(BaseModel):
-    """键盘行"""
-
-    buttons: list[MessageButton] = field(default_factory=list)
-
-
-@dataclass
-class MessageKeyboardContent(BaseModel):
-    """键盘内容"""
-
-    rows: list[MessageKeyboardRow] = field(default_factory=list)
-
-
-@dataclass
-class MessageKeyboard(BaseModel):
-    """消息键盘"""
-
-    id: Optional[str] = None
-    content: Optional[MessageKeyboardContent] = None
+    content_type: str | None = None
+    filename: str | None = None
+    height: int | None = None
+    width: int | None = None
+    size: int | None = None
+    voice_wav_url: str | None = None
+    asr_refer_text: str | None = None
 
 
 @dataclass
@@ -1283,7 +1027,7 @@ class MessageBase(BaseModel):
     id: str = ""
     content: str = ""
     timestamp: str = ""
-    author: Optional[Author] = None
+    author: Author | None = None
     attachments: list[Attachment] = field(default_factory=list)
     treated_msg: str = ""
 
@@ -1324,12 +1068,12 @@ class GuildMessage(MessageBase):
 
     channel_id: str = ""
     guild_id: str = ""
-    edited_timestamp: Optional[str] = None
+    edited_timestamp: str | None = None
     tts: bool = False
     mention_everyone: bool = False
-    member: Optional[Member] = None
-    seq: Optional[int] = None
-    seq_in_channel: Optional[str] = None
+    member: Member | None = None
+    seq: int | None = None
+    seq_in_channel: str | None = None
     pinned: bool = False
     type: int = 0
     flags: int = 0
@@ -1409,7 +1153,7 @@ class DirectMessage(MessageBase):
 
     channel_id: str = ""
     guild_id: str = ""
-    member: Optional[Member] = None
+    member: Member | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "DirectMessage":
@@ -1437,8 +1181,8 @@ class MessageDelete(BaseModel):
     用于消息删除事件。
     """
 
-    message: Optional[GuildMessage] = None
-    op_user: Optional[Author] = None
+    message: GuildMessage | None = None
+    op_user: Author | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "MessageDelete":
@@ -1514,8 +1258,8 @@ class MessageReaction(BaseModel):
     user_id: str = ""
     guild_id: str = ""
     channel_id: str = ""
-    target: Optional[ReactionTarget] = None
-    emoji: Optional[Emoji] = None
+    target: ReactionTarget | None = None
+    emoji: Emoji | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "MessageReaction":
@@ -1536,24 +1280,6 @@ class MessageReaction(BaseModel):
             emoji=emoji,
             _raw_data=data,
         )
-
-
-@dataclass
-class AudioControl(BaseModel):
-    """
-    音频控制对象
-
-    用于音频控制 API。
-    """
-
-    audio_url: str = ""
-    text: str = ""
-    status: int = 0
-
-    STATUS_START: ClassVar[int] = 0
-    STATUS_PAUSE: ClassVar[int] = 1
-    STATUS_RESUME: ClassVar[int] = 2
-    STATUS_STOP: ClassVar[int] = 3
 
 
 @dataclass
@@ -1628,7 +1354,7 @@ class Post(BaseModel):
     guild_id: str = ""
     channel_id: str = ""
     author_id: str = ""
-    post_info: Optional[PostInfo] = None
+    post_info: PostInfo | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "Post":
@@ -1690,7 +1416,7 @@ class Reply(BaseModel):
     guild_id: str = ""
     channel_id: str = ""
     author_id: str = ""
-    reply_info: Optional[ReplyInfo] = None
+    reply_info: ReplyInfo | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "Reply":
@@ -1723,9 +1449,13 @@ class AuditResult(BaseModel):
     type: int = 0
     result: int = 0
     err_msg: str = ""
-    thread_id: Optional[str] = None
-    post_id: Optional[str] = None
-    reply_id: Optional[str] = None
+    thread_id: str | None = None
+    post_id: str | None = None
+    reply_id: str | None = None
+
+    TYPE_PUBLISH_THREAD: ClassVar[int] = 1
+    TYPE_PUBLISH_POST: ClassVar[int] = 2
+    TYPE_PUBLISH_REPLY: ClassVar[int] = 3
 
 
 @dataclass
@@ -1765,8 +1495,8 @@ class FriendEvent(BaseModel):
 
     timestamp: int = 0
     openid: str = ""
-    scene: Optional[int] = None
-    scene_param: Optional[str] = None
+    scene: int | None = None
+    scene_param: str | None = None
 
 
 @dataclass
@@ -1784,7 +1514,7 @@ class InteractionData(BaseModel):
     """互动事件数据"""
 
     type: int = 0
-    resolved: Optional[InteractionDataResolved] = None
+    resolved: InteractionDataResolved | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "InteractionData":
@@ -1816,12 +1546,12 @@ class Interaction(BaseModel):
     scene: str = ""
     chat_type: int = 0
     timestamp: str = ""
-    guild_id: Optional[str] = None
-    channel_id: Optional[str] = None
-    user_openid: Optional[str] = None
-    group_openid: Optional[str] = None
-    group_member_openid: Optional[str] = None
-    data: Optional[InteractionData] = None
+    guild_id: str | None = None
+    channel_id: str | None = None
+    user_openid: str | None = None
+    group_openid: str | None = None
+    group_member_openid: str | None = None
+    data: InteractionData | None = None
     version: int = 1
 
     TYPE_BUTTON: ClassVar[int] = 11
@@ -1902,8 +1632,8 @@ class Payload(BaseModel):
     id: str = ""
     op: int = 0
     d: dict[str, Any] = field(default_factory=dict)
-    s: Optional[int] = None
-    t: Optional[str] = None
+    s: int | None = None
+    t: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "Payload":
@@ -1967,8 +1697,8 @@ class ChannelPermissions(BaseModel):
     """
 
     channel_id: str = ""
-    user_id: Optional[str] = None
-    role_id: Optional[str] = None
+    user_id: str | None = None
+    role_id: str | None = None
     permissions: str = ""
 
 
@@ -2124,7 +1854,56 @@ class FileInfo(BaseModel):
     file_uuid: str = ""
     file_info: str = ""
     ttl: int = 0
-    id: Optional[str] = None
+    id: str | None = None
+
+
+@dataclass
+class UploadPart(BaseModel):
+    """
+    分片信息对象
+
+    用于大文件分片上传的分片信息。
+    """
+
+    index: int = 0
+    presigned_url: str = ""
+
+
+@dataclass
+class UploadPrepareResponse(BaseModel):
+    """
+    大文件分片上传申请响应
+
+    接口: POST /v2/users/{openid}/upload_prepare 或 /v2/groups/{group_openid}/upload_prepare
+    返回上传任务 ID、分块大小和分片列表。
+    """
+
+    upload_id: str = ""
+    block_size: int = 0
+    parts: list[UploadPart] = field(default_factory=list)
+    concurrency: int | None = None
+    retry_timeout: int | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "UploadPrepareResponse":
+        if data is None:
+            return None
+
+        parts_data = data.get("parts", [])
+        parts = [UploadPart.from_dict(p) for p in parts_data if p]
+
+        return cls(
+            upload_id=data.get("upload_id", ""),
+            block_size=int(data.get("block_size", 0)),
+            parts=parts,
+            concurrency=(
+                int(data.get("concurrency")) if data.get("concurrency") else None
+            ),
+            retry_timeout=(
+                int(data.get("retry_timeout")) if data.get("retry_timeout") else None
+            ),
+            _raw_data=data,
+        )
 
 
 @dataclass
@@ -2159,7 +1938,7 @@ class APIPermissionDemand(BaseModel):
 
     guild_id: str = ""
     channel_id: str = ""
-    api_identify: Optional[APIPermissionDemandIdentify] = None
+    api_identify: APIPermissionDemandIdentify | None = None
     title: str = ""
     desc: str = ""
 
@@ -2222,7 +2001,7 @@ class GatewayBotResponse(BaseModel):
 
     url: str = ""
     shards: int = 1
-    session_start_limit: Optional[SessionStartLimit] = None
+    session_start_limit: SessionStartLimit | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "GatewayBotResponse":
@@ -2281,7 +2060,7 @@ class CreateRoleResponse(BaseModel):
     """
 
     role_id: str = ""
-    role: Optional[Role] = None
+    role: Role | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "CreateRoleResponse":
@@ -2450,11 +2229,11 @@ class StreamMessageResponse(BaseModel):
     失败时返回: { code, message }
     """
 
-    code: Optional[int] = None
-    message: Optional[str] = None
-    id: Optional[str] = None
-    timestamp: Optional[str] = None
-    ext_info: Optional[dict] = None
+    code: int | None = None
+    message: str | None = None
+    id: str | None = None
+    timestamp: str | None = None
+    ext_info: dict | None = None
 
 
 # 流式消息输入模式常量
@@ -2497,88 +2276,46 @@ class Model:
     Guild: TypeAlias = Guild
     Channel: TypeAlias = Channel
     Thread: TypeAlias = Thread
-    ThreadInfo: TypeAlias = ThreadInfo
     ThreadListResult: TypeAlias = ThreadListResult
     ThreadDetail: TypeAlias = ThreadDetail
     ThreadContent: TypeAlias = ThreadContent
-    ThreadContentParagraph: TypeAlias = ThreadContentParagraph
-    ThreadContentElem: TypeAlias = ThreadContentElem
-    ThreadContentText: TypeAlias = ThreadContentText
-    ThreadContentUrl: TypeAlias = ThreadContentUrl
-    ThreadContentImage: TypeAlias = ThreadContentImage
-    ThreadContentPlatImage: TypeAlias = ThreadContentPlatImage
-    ThreadContentVideo: TypeAlias = ThreadContentVideo
-    ThreadContentPlatVideo: TypeAlias = ThreadContentPlatVideo
-    RichText: TypeAlias = RichText
-    TextInfo: TypeAlias = TextInfo
-    AtInfo: TypeAlias = AtInfo
-    AtUserInfo: TypeAlias = AtUserInfo
-    AtRoleInfo: TypeAlias = AtRoleInfo
-    AtGuildInfo: TypeAlias = AtGuildInfo
-    URLInfo: TypeAlias = URLInfo
-    EmojiInfo: TypeAlias = EmojiInfo
-    ChannelInfo: TypeAlias = ChannelInfo
-    TextProps: TypeAlias = TextProps
-    ParagraphProps: TypeAlias = ParagraphProps
-    AuditType: TypeAlias = AuditType
-    AtType: TypeAlias = AtType
     Alignment: TypeAlias = Alignment
 
-    Attachment: TypeAlias = Attachment
     GuildMessage: TypeAlias = GuildMessage
     GroupMessage: TypeAlias = GroupMessage
     C2CMessage: TypeAlias = C2CMessage
     DirectMessage: TypeAlias = DirectMessage
-    MessageEmbed: TypeAlias = MessageEmbed
-    MessageEmbedThumbnail: TypeAlias = MessageEmbedThumbnail
-    MessageEmbedField: TypeAlias = MessageEmbedField
-    MessageArk: TypeAlias = MessageArk
-    MessageArkKv: TypeAlias = MessageArkKv
-    MessageArkObj: TypeAlias = MessageArkObj
-    MessageArkObjKv: TypeAlias = MessageArkObjKv
-    MessageReference: TypeAlias = MessageReference
-    MessageMarkdown: TypeAlias = MessageMarkdown
-    MessageMarkdownParams: TypeAlias = MessageMarkdownParams
-    MessageButton: TypeAlias = MessageButton
-    MessageButtonPermission: TypeAlias = MessageButtonPermission
+
+    Message: TypeAlias = GuildMessage | GroupMessage | C2CMessage | DirectMessage
 
     MessageDelete: TypeAlias = MessageDelete
     MessageAudited: TypeAlias = MessageAudited
     MessageReaction: TypeAlias = MessageReaction
-    ReactionTarget: TypeAlias = ReactionTarget
-    Emoji: TypeAlias = Emoji
-    AudioControl: TypeAlias = AudioControl
     AudioAction: TypeAlias = AudioAction
     LiveChannelMember: TypeAlias = LiveChannelMember
     Post: TypeAlias = Post
-    PostInfo: TypeAlias = PostInfo
     Reply: TypeAlias = Reply
-    ReplyInfo: TypeAlias = ReplyInfo
     AuditResult: TypeAlias = AuditResult
     OpenForumEvent: TypeAlias = OpenForumEvent
     GroupEvent: TypeAlias = GroupEvent
     FriendEvent: TypeAlias = FriendEvent
     Interaction: TypeAlias = Interaction
-    InteractionData: TypeAlias = InteractionData
-    InteractionDataResolved: TypeAlias = InteractionDataResolved
 
     OpCode: TypeAlias = OpCode
     Payload: TypeAlias = Payload
 
-    APIPermission: TypeAlias = APIPermission
     Role: TypeAlias = Role
     ChannelPermissions: TypeAlias = ChannelPermissions
     DMS: TypeAlias = DMS
-    RecommendChannel: TypeAlias = RecommendChannel
     Announces: TypeAlias = Announces
     Schedule: TypeAlias = Schedule
     PinsMessage: TypeAlias = PinsMessage
     ReactionUsers: TypeAlias = ReactionUsers
     FileInfo: TypeAlias = FileInfo
+    UploadPart: TypeAlias = UploadPart
+    UploadPrepareResponse: TypeAlias = UploadPrepareResponse
     MessageSetting: TypeAlias = MessageSetting
-    APIPermissionDemandIdentify: TypeAlias = APIPermissionDemandIdentify
     APIPermissionDemand: TypeAlias = APIPermissionDemand
-    SessionStartLimit: TypeAlias = SessionStartLimit
     GatewayResponse: TypeAlias = GatewayResponse
     GatewayBotResponse: TypeAlias = GatewayBotResponse
     GuildRolesResponse: TypeAlias = GuildRolesResponse

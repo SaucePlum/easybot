@@ -109,7 +109,7 @@ class StopProcessing(EasyBotException):
     pass
 
 
-class WaitError(Exception):
+class WaitError(EasyBotException):
     """
     等待错误
 
@@ -120,7 +120,7 @@ class WaitError(Exception):
     pass
 
 
-class WaitTimeoutError(Exception):
+class WaitTimeoutError(EasyBotException):
     """
     等待超时错误
 

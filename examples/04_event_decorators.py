@@ -59,16 +59,19 @@ def main() -> None:
     async def on_member_add(msg: Model.MemberWithGuildID) -> None:
         """成员加入频道"""
         bot.logger.info(f"[成员加入] {msg.user.username} 加入了频道")
+        await msg.reply("欢迎加入频道", channel_id="目标子频道ID")
 
     @bot.on_guild_member_remove
     async def on_member_remove(msg: Model.MemberWithGuildID) -> None:
         """成员退出频道"""
         bot.logger.info(f"[成员退出] {msg.user.username} 退出了频道")
+        await msg.reply("成员已退出频道", channel_id="目标子频道ID")
 
     @bot.on_guild_member_update
     async def on_member_update(msg: Model.MemberWithGuildID) -> None:
         """成员信息更新"""
         bot.logger.info(f"[成员更新] {msg.user.username} 信息已更新")
+        await msg.reply("成员信息已更新", channel_id="目标子频道ID")
 
     # ==================== 4.3 频道生命周期事件 ====================
 
@@ -98,11 +101,7 @@ def main() -> None:
     async def on_group_add(msg: Model.GroupEvent) -> None:
         """机器人被加入群聊"""
         bot.logger.info(f"[加入群聊] 机器人被加入群聊：{msg.group_openid}")
-        # 可以发送欢迎消息
-        # await bot.api.send_group_message(
-        #     group_openid=msg.group_openid,
-        #     content="大家好！我是机器人，请多关照！"
-        # )
+        await msg.reply("大家好！我是机器人，请多关照！")
 
     @bot.on_group_delete
     async def on_group_delete(msg: Model.GroupEvent) -> None:
@@ -113,6 +112,7 @@ def main() -> None:
     async def on_friend_add(msg: Model.FriendEvent) -> None:
         """添加好友"""
         bot.logger.info(f"[添加好友] {msg.openid}")
+        await msg.reply("你好，已收到好友事件")
 
     @bot.on_friend_delete
     async def on_friend_delete(msg: Model.FriendEvent) -> None:
@@ -125,18 +125,21 @@ def main() -> None:
     async def on_interaction(msg: Model.Interaction) -> None:
         """互动按钮点击事件"""
         bot.logger.info(f"[按钮点击] {msg.data}")
-        # 回应互动事件
-        await bot.api.respond_interaction(interaction_id=msg.id, code=0)
+        await msg.reply("按钮已处理")
 
     @bot.on_reaction_add
     async def on_reaction_add(msg: Model.MessageReaction) -> None:
         """表情表态添加"""
-        bot.logger.info(f"[表情添加] {msg.emoji.name}")
+        emoji_id = msg.emoji.id if msg.emoji else ""
+        bot.logger.info(f"[表情添加] {emoji_id}")
+        await msg.reply("收到表情添加事件")
 
     @bot.on_reaction_remove
     async def on_reaction_remove(msg: Model.MessageReaction) -> None:
         """表情表态移除"""
-        bot.logger.info(f"[表情移除] {msg.emoji.name}")
+        emoji_id = msg.emoji.id if msg.emoji else ""
+        bot.logger.info(f"[表情移除] {emoji_id}")
+        await msg.reply("收到表情移除事件")
 
     # ==================== 4.6 消息删除事件 ====================
 

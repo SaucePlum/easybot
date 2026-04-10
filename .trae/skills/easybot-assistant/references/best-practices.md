@@ -72,11 +72,11 @@ async def handle_guild(msg: Model.GuildMessage) -> None:
 async def test_cmd(
     msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
 ) -> None:
-    result: Optional[str] = process_message(msg.treated_msg)
+    result: str | None = process_message(msg.treated_msg)
     if result:
         await msg.reply(result)
 
-def process_message(text: str) -> Optional[str]:
+def process_message(text: str) -> str | None:
     if not text:
         return None
     return text.upper()
@@ -391,10 +391,9 @@ bot.logger.info(f"用户输入: {sanitize_for_log(user_input)}")
 
 ```python
 import re
-from typing import Optional
 from easybot import Model
 
-def validate_user_input(text: str, max_length: int = 500) -> Optional[str]:
+def validate_user_input(text: str, max_length: int = 500) -> str | None:
     """验证并清理用户输入"""
     if not text:
         return None
@@ -513,6 +512,7 @@ bot = Bot(
     is_sandbox=False,  # 关闭沙箱模式
     is_log_error=True,  # 记录错误日志
     no_permission_warning=True,  # 权限警告
+    max_concurrency=64,  # 事件处理器/命令最大并发数
 )
 
 # 禁止在日志中输出敏感信息

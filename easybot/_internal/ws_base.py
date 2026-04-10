@@ -16,6 +16,7 @@ from .event_utils import cleanup_session, cleanup_task, cleanup_websocket
 
 if TYPE_CHECKING:
     from ..bot import Bot
+    from ..logger import Logger
 
 
 class BaseWebSocketClient(ABC):
@@ -29,7 +30,7 @@ class BaseWebSocketClient(ABC):
     def __init__(
         self,
         bot: "Bot",
-        logger: Any,
+        logger: "Logger",
         connect_timeout: float = 30.0,
         heartbeat_interval: float = 41.25,
         no_msg_timeout: float = 180.0,

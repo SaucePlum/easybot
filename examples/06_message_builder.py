@@ -3,7 +3,6 @@
 EasyBot SDK 示例 06：消息构建器使用方法
 
 展示 MessagesModel 提供的各种消息类型构建方法：
-- Message: 普通消息（文本、图片、引用）
 - MessageEmbed: Embed 消息
 - MessageArk23: Ark 23 模板（链接列表）
 - MessageArk24: Ark 24 模板（图文）
@@ -30,12 +29,11 @@ def main():
     async def handle_group(msg: Model.GroupMessage):
         """群聊消息处理示例"""
 
-        # ==================== 6.1 普通消息（群聊） ====================
+        # ==================== 6.1 普通消息参数（群聊） ====================
 
         if msg.treated_msg == "纯文本":
             # 纯文本消息
-            text_msg = MessagesModel.Message(content="Hello World")
-            await msg.reply(text_msg)
+            await msg.reply("Hello World")
 
         # 注意：群聊不支持直接使用 image/file_image 参数
         # 需要使用 upload_media API 上传后发送
@@ -44,40 +42,35 @@ def main():
     async def handle_guild(msg: Model.GuildMessage):
         """频道消息处理示例"""
 
-        # ==================== 6.1 普通消息（频道） ====================
+        # ==================== 6.1 普通消息参数（频道） ====================
 
         if msg.treated_msg == "纯文本":
             # 纯文本
-            text_msg = MessagesModel.Message(content="Hello World")
-            await msg.reply(text_msg)
+            await msg.reply("Hello World")
 
         # ----- 带网络图片（仅频道支持） -----
         elif msg.treated_msg == "网络图片":
-            image_msg = MessagesModel.Message(
-                content="看这张图", image="https://example.com/image.png"  # 仅频道支持
+            await msg.reply(
+                "看这张图",
+                image="https://example.com/image.png",
             )
-            await msg.reply(image_msg)
 
         # ----- 带本地图片（仅频道支持） -----
         elif msg.treated_msg == "本地图片":
-            local_image_msg = MessagesModel.Message(
-                content="本地图片", file_image="./images/photo.jpg"  # 仅频道支持
+            await msg.reply(
+                "本地图片",
+                file_image="./images/photo.jpg",
             )
-            await msg.reply(local_image_msg)
 
         # ----- 仅图片（仅频道支持） -----
         elif msg.treated_msg == "仅图片":
-            image_only = MessagesModel.Message(
-                file_image="./images/only_image.png"  # 仅频道支持
+            await msg.reply(
+                file_image="./images/only_image.png",
             )
-            await msg.reply(image_only)
 
         # ----- 引用回复 -----
         elif msg.treated_msg == "引用":
-            reply_msg = MessagesModel.Message(
-                content="这是回复", message_reference_id=msg.id  # 引用原消息
-            )
-            await msg.reply(reply_msg)
+            await msg.reply("这是回复", reference=True)
 
         # ==================== 6.2 Embed 消息 ====================
 

@@ -191,14 +191,46 @@ async def fetch_data(self):
 ```
 
 ### 后台任务管理
-使用 `create_task` 启动后台管理循环：
+使用 `create_task` 启动后台管理循环，保存 task 引用以支持优雅停止：
 ```python
 def start(self, loop: AbstractEventLoop):
     """启动后台任务"""
     if not self._is_running:
-        loop.create_task(self._manager_loop(loop))
-        loop.create_task(self.fetch_data())
+        self._stop_event.clear()
+        self._manager_task = loop.create_task(self._manager_loop())
+        if not self._data_loaded:
+            self._fetch_task = loop.create_task(self.fetch_data())
+            self._data_loaded = True
         self._is_running = True
+
+async def stop(self) -> None:
+    """停止后台任务，防止 Task Leak"""
+    if not self._is_running:
+        return
+
+    self._stop_event.set()
+
+    for task in (self._manager_task, self._fetch_task):
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    self._manager_task = None
+    self._fetch_task = None
+    self._is_running = False
+
+async def _manager_loop(self):
+    """使用 wait_for(event.wait(), timeout) 替代 sleep，支持即时响应退出信号"""
+    while not self._stop_event.is_set():
+        try:
+            await asyncio.wait_for(self._stop_event.wait(), timeout=5.0)
+            break
+        except asyncio.TimeoutError:
+            pass
+        # ... 执行周期性检查 ...
 ```
 
 ## 超时处理最佳实践
@@ -225,17 +257,20 @@ if msg_id_expired:
 ## 异步上下文管理器
 
 ### bind() 上下文管理器
-用于绑定消息对象到会话管理：
+用于绑定消息对象到会话管理，使用 `ContextVar` 实现协程隔离：
 ```python
+from contextvars import ContextVar
+
+_current_obj_var: ContextVar = ContextVar("_current_obj", default=None)
+
 @contextmanager
 def bind(self, obj):
     """绑定消息对象的上下文管理器"""
-    old_obj = self._current_obj
-    self._current_obj = obj
+    token = self._current_obj_var.set(obj)
     try:
         yield BoundSession(self, obj)
     finally:
-        self._current_obj = old_obj
+        self._current_obj_var.reset(token)
 ```
 
 ### 使用示例

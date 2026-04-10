@@ -4,6 +4,7 @@ EasyBot SDK 示例 12：优化后的 wait_for 使用方法
 
 展示 Session 会话管理器和 wait_for 的优化功能：
 - 简洁的 wait_for 接口（直接传 command/regex）
+- 高级用法：直接传入 BotCommandObject 使用完整参数
 - 自定义谓词函数匹配
 - 超时回调函数
 - 插件命令的动态管理
@@ -11,7 +12,16 @@ EasyBot SDK 示例 12：优化后的 wait_for 使用方法
 
 from re import compile as re_compile
 
-from easybot import Bot, Model, Plugins, Scope, WaitTimeoutError
+from easybot import (
+    Bot,
+    BotCommandObject,
+    CommandValidScenes,
+    Model,
+    Plugins,
+    Scope,
+    WaitTimeoutError,
+)
+from easybot.models import C2CMessage, DirectMessage, GroupMessage, GuildMessage
 
 
 def main() -> None:
@@ -228,6 +238,144 @@ def main() -> None:
 
             except WaitTimeoutError:
                 await msg.reply("⏰ 选择超时")
+
+    # ==================== 12.7 高级用法：直接传入 BotCommandObject ====================
+
+    @bot.on_command(command="管理员确认")
+    async def cmd_admin_confirm(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
+        """演示通过 BotCommandObject 使用 admin 权限校验"""
+        with bot.session.bind(msg) as s:
+            await msg.reply(
+                "🔒 此操作需要管理员权限\n" "请回复「确认执行」或「取消」："
+            )
+
+            try:
+                # 直接传入 BotCommandObject，使用 admin 参数进行权限校验
+                admin_cmd = BotCommandObject(
+                    command=["确认执行", "取消"],
+                    admin=True,  # 要求频道/群管理员权限
+                    admin_error_msg="⚠️ 你没有管理员权限，操作已取消",
+                )
+                result = await s.wait_for(
+                    scopes=Scope.USER,
+                    command=admin_cmd,
+                    timeout=30,
+                )
+
+                if "确认" in result.content:
+                    await msg.reply("✅ 管理员已确认！敏感操作执行成功")
+                else:
+                    await msg.reply("❌ 已取消")
+
+            except WaitTimeoutError:
+                await msg.reply("⏰ 等待超时")
+
+    @bot.on_command(command="机器人管理")
+    async def cmd_bot_admin(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
+        """演示通过 BotCommandObject 使用 is_require_bot_admin 校验"""
+        with bot.session.bind(msg) as s:
+            await msg.reply("🤖 仅机器人管理员可操作\n请回复「shutdown」或「cancel」：")
+
+            try:
+                # 使用 is_require_bot_admin 限制仅机器人管理员可触发
+                bot_admin_cmd = BotCommandObject(
+                    command=["shutdown", "cancel"],
+                    is_require_bot_admin=True,  # 要求机器人管理员权限
+                    bot_admin_error_msg="⚠️ 你不是机器人管理员",
+                )
+                result = await s.wait_for(
+                    scopes=Scope.USER,
+                    command=bot_admin_cmd,
+                    timeout=20,
+                )
+
+                if result.content == "shutdown":
+                    await msg.reply("🔴 机器人管理员已确认关闭指令")
+                else:
+                    await msg.reply("已取消")
+
+            except WaitTimeoutError:
+                await msg.reply("⏰ 等待超时")
+
+    @bot.on_command(command="正则+艾特")
+    async def cmd_regex_at(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
+        """演示通过 BotCommandObject 同时使用 regex 和 at 参数"""
+        with bot.session.bind(msg) as s:
+            await msg.reply(
+                "@我 并发送一个 4 位数字验证码：\n"
+                "（需要同时满足 @机器人 和 数字格式要求）"
+            )
+
+            try:
+                # 组合使用正则匹配 + @机器人要求
+                regex_at_cmd = BotCommandObject(
+                    regex=re_compile(r"^\d{4}$"),
+                    at=True,  # 必须在消息中 @机器人
+                )
+                result: GuildMessage | GroupMessage | C2CMessage | DirectMessage = (
+                    await s.wait_for(
+                        scopes=Scope.USER,
+                        command=regex_at_cmd,
+                        timeout=60,
+                    )
+                )
+                await msg.reply(f"✅ 验证码 {result.content} 验证成功（已 @我）")
+
+            except WaitTimeoutError:
+                await msg.reply("⏰ 验证超时")
+
+    @bot.on_command(command="场景限制等待")
+    async def cmd_scene_limited(
+        msg: (
+            Model.GuildMessage
+            | Model.GroupMessage
+            | Model.C2CMessage
+            | Model.DirectMessage
+        ),
+    ) -> None:
+        """演示通过 BotCommandObject 的 valid_scenes 限制有效场景"""
+        with bot.session.bind(msg) as s:
+            await msg.reply(
+                "📍 请在 **频道** 或 **群聊** 中回复「ok」：\n"
+                "（单聊中不会响应此等待）"
+            )
+
+            try:
+                # 限制仅在频道和群聊场景生效，单聊不响应
+                scene_cmd = BotCommandObject(
+                    command="ok",
+                    valid_scenes=CommandValidScenes.GUILD | CommandValidScenes.GROUP,
+                )
+                result = await s.wait_for(
+                    scopes=Scope.USER,
+                    command=scene_cmd,
+                    timeout=30,
+                )
+                await msg.reply("✅ 收到！当前为频道或群聊场景")
+
+            except WaitTimeoutError:
+                await msg.reply("⏰ 等待超时")
 
     bot.start()
 

@@ -15,9 +15,23 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable
 from pathlib import Path
 from re import Pattern
-from typing import Any, Set, Union
+from typing import Any, TypedDict
 
 import yaml
+
+
+class PluginStats(TypedDict):
+    commands: int
+    preprocessors: int
+
+
+class PluginReloadResult(TypedDict, total=False):
+    module: str
+    unloaded: PluginStats
+    loaded: PluginStats
+    success: bool
+    error: str | None
+    loaded_plugins: list[str]
 
 
 class CommandValidScenes(int):
@@ -86,7 +100,7 @@ class BotAdminManager:
             return
         self._data_dir = data_dir or os.path.join(os.getcwd(), self._DEFAULT_DATA_DIR)
         self._file_path = Path(self._data_dir) / self._DEFAULT_FILE_NAME
-        self._admins: Set[str] = set()
+        self._admins: set[str] = set()
         self._data_loaded = False
         self._initialized = True
 
@@ -154,7 +168,7 @@ class BotAdminManager:
         """
         return user_id in self._admins
 
-    def get_all_admins(self) -> set:
+    def get_all_admins(self) -> set[str]:
         """
         获取所有机器人管理员
 
@@ -260,13 +274,17 @@ class BotCommandObject:
         _command = None
         if command is not None:
             if isinstance(command, str):
-                _command = (command,)
+                # 归一化：去除开头的斜杠，使用户无论注册 /hi 还是 hi 都能正常工作
+                normalized = command.lstrip("/")
+                _command = (normalized,)
             elif isinstance(command, Iterable):
                 _command = []
                 for i in command:
                     if not isinstance(i, str):
                         raise TypeError("command must be of type Iterable[str]")
-                    _command.append(i)
+                    # 归一化：去除每个命令开头的斜杠
+                    normalized = i.lstrip("/")
+                    _command.append(normalized)
             else:
                 raise TypeError("command must be of type Iterable[str]")
 
@@ -363,6 +381,8 @@ class Plugins:
     _command_to_module: dict[str, str] = {}
     _module_paths: dict[str, Path] = {}
     _current_loading_module: str | None = None
+    _module_command_objs: dict[str, list[int]] = defaultdict(list)
+    _module_preprocessor_objs: dict[str, list[tuple[int, int]]] = defaultdict(list)
 
     @classmethod
     def _get_caller_module(cls) -> str:
@@ -504,19 +524,33 @@ class Plugins:
     def before_command(
         cls,
         valid_scenes: CommandValidScenes = CommandValidScenes.ALL,
+        _module_name: str | None = None,
     ):
         """
         注册plugins预处理器，将在检查所有commands前执行
 
         :param valid_scenes: 此处理器的有效场景，可传入多个场景，默认 CommandValidScenes.ALL
+        :param _module_name: 内部参数，显式指定所属模块名（由 Bot.before_command 传入）
+
+        callback: 类型为 function。该回调函数应包含一个参数，
+            用于接收命令触发场景对应的消息模型对象。
+            具体类型由 valid_scenes 决定：
+            - CommandValidScenes.GUILD -> Model.GuildMessage
+            - CommandValidScenes.GROUP -> Model.GroupMessage
+            - CommandValidScenes.C2C -> Model.C2CMessage
+            - CommandValidScenes.DM -> Model.DirectMessage
+            - 多场景组合 -> 上述类型的联合类型
         """
 
         def wrap(func: Callable):
-            module_name = cls._get_caller_module()
+            module_name = _module_name or cls._get_caller_module()
             for bit in range(CommandValidScenes.ALL.bit_length()):
                 current_bit = 1 << bit
                 if current_bit & valid_scenes:
                     Plugins._preprocessors[current_bit].append(func)
+                    Plugins._module_preprocessor_objs[module_name].append(
+                        (id(func), current_bit)
+                    )
             Plugins._module_preprocessors[module_name].append(func.__name__)
             return func
 
@@ -525,8 +559,8 @@ class Plugins:
     @classmethod
     def on_command(
         cls,
-        command: Union[Iterable[str], str, None] = None,
-        regex: Union[Pattern, str, Iterable[Union[Pattern, str]], None] = None,
+        command: Iterable[str] | str | None = None,
+        regex: Pattern | str | Iterable[Pattern | str] | None = None,
         is_treat: bool = True,
         is_require_at: bool = False,
         is_short_circuit: bool = True,
@@ -537,12 +571,13 @@ class Plugins:
         enabled: bool = True,
         is_require_bot_admin: bool = False,
         bot_admin_error_msg: str | None = None,
+        _module_name: str | None = None,
     ):
         """
         注册plugins指令装饰器，可用于分割式编写指令并注册进机器人
 
         :param command: 可触发事件的指令列表，与正则regex互斥，优先使用此项
-        :param regex: 可触发指令的正则compile实例或正则表达式，与指令表互斥
+        :param regex: 可触发指令的正则compile实例、正则表达式或它们的可迭代对象，与指令表互斥
         :param is_treat: 是否在treated_msg中同时处理指令，如正则将返回.groups()，默认是
         :param is_require_at: 是否要求必须艾特机器人才能触发指令，默认否
         :param is_short_circuit: 如果触发指令成功是否短路不运行后续指令（将根据注册顺序排序指令的短路机制），默认是
@@ -553,6 +588,16 @@ class Plugins:
         :param enabled: 是否启用此指令，默认True
         :param is_require_bot_admin: 是否要求机器人管理员才可触发指令，默认否
         :param bot_admin_error_msg: 当is_require_bot_admin为True，而触发用户的权限不足时，如此项不为None，返回此消息并短路；否则不进行短路
+        :param _module_name: 内部参数，显式指定所属模块名（由 Bot.on_command 传入）
+
+        callback: 类型为 function。该回调函数应包含一个参数，
+            用于接收命令触发场景对应的消息模型对象。
+            具体类型由 valid_scenes 决定：
+            - CommandValidScenes.GUILD -> Model.GuildMessage
+            - CommandValidScenes.GROUP -> Model.GroupMessage
+            - CommandValidScenes.C2C -> Model.C2CMessage
+            - CommandValidScenes.DM -> Model.DirectMessage
+            - 多场景组合 -> 上述类型的联合类型
         """
 
         def wrap(func: Callable):
@@ -560,7 +605,7 @@ class Plugins:
                 print(
                     "注意is_short_circuit与is_custom_short_circuit同时存在，将优先使用is_custom_short_circuit"
                 )
-            module_name = cls._get_caller_module()
+            module_name = _module_name or cls._get_caller_module()
             _kwargs = {
                 "func": func,
                 "treat": is_treat,
@@ -603,6 +648,7 @@ class Plugins:
                         "regex参数仅接受re.compile返回的实例或str类型的正则表达式"
                     )
             Plugins._commands.append(command_obj)
+            Plugins._module_command_objs[module_name].append(id(command_obj))
             Plugins._module_commands[module_name].append(func.__name__)
             if command_obj.command:
                 for cmd_name in command_obj.command:
@@ -684,11 +730,12 @@ class Plugins:
     @classmethod
     def reload_plugin(
         cls, plugin_name_or_command: str, plugins_dir: str | Path = "plugins"
-    ) -> dict:
+    ) -> PluginReloadResult:
         """
         热重载指定插件
 
-        只支持通过 @Plugins.on_command 注册的插件，不支持 @bot.on_command 注册的命令。
+        支持插件模块中通过 @Plugins.on_command 和 @Plugins.before_command 注册的内容，
+        不支持主程序中通过 @bot.on_command / @bot.before_command 直接注册的内容。
 
         自动识别参数类型：
         - 先尝试从已加载模块获取路径
@@ -738,15 +785,18 @@ class Plugins:
         }
 
     @classmethod
-    def unload_plugin(cls, plugin_name_or_command: str) -> dict[str, int]:
+    def unload_plugin(cls, plugin_name_or_command: str) -> PluginStats:
         """
         卸载指定插件的所有命令和预处理器
 
-        只支持通过 @Plugins.on_command 注册的插件，不支持 @bot.on_command 注册的命令。
+        支持插件模块中通过 @Plugins.on_command 和 @Plugins.before_command 注册的内容，
+        不支持主程序中通过 @bot.on_command / @bot.before_command 直接注册的内容。
 
         自动识别参数类型：
         - 先尝试作为插件名匹配
         - 找不到则尝试作为命令名查找对应的插件
+
+        使用对象 id 匹配而非函数名，避免不同插件中同名函数的冲突。
 
         Args:
             plugin_name_or_command: 插件名或命令名
@@ -765,19 +815,30 @@ class Plugins:
 
         result = {"commands": 0, "preprocessors": 0}
 
-        if (
-            plugin_name not in cls._module_commands
-            and plugin_name not in cls._module_preprocessors
-        ):
+        has_commands = (
+            plugin_name in cls._module_command_objs
+            or plugin_name in cls._module_commands
+        )
+        has_preprocessors = (
+            plugin_name in cls._module_preprocessor_objs
+            or plugin_name in cls._module_preprocessors
+        )
+
+        if not has_commands and not has_preprocessors:
             return result
 
-        if plugin_name in cls._module_commands:
-            cmd_names = cls._module_commands[plugin_name]
-            cls._commands = [
-                cmd for cmd in cls._commands if cmd.func.__name__ not in cmd_names
-            ]
-            result["commands"] = len(cmd_names)
+        if has_commands:
+            cmd_obj_ids = set(cls._module_command_objs.get(plugin_name, []))
+            if cmd_obj_ids:
+                removed_count = len(Plugins._commands)
+                Plugins._commands = [
+                    cmd for cmd in Plugins._commands if id(cmd) not in cmd_obj_ids
+                ]
+                removed_count -= len(Plugins._commands)
+                result["commands"] = removed_count
+
             del cls._module_commands[plugin_name]
+            cls._module_command_objs.pop(plugin_name, None)
 
             cls._command_to_module = {
                 cmd: mod
@@ -785,16 +846,35 @@ class Plugins:
                 if mod != plugin_name
             }
 
-        if plugin_name in cls._module_preprocessors:
-            preprocessor_names = cls._module_preprocessors[plugin_name]
-            for scene_bit in cls._preprocessors:
-                cls._preprocessors[scene_bit] = [
-                    func
-                    for func in cls._preprocessors[scene_bit]
-                    if func.__name__ not in preprocessor_names
-                ]
-            result["preprocessors"] = len(preprocessor_names)
+        if has_preprocessors:
+            preprocessor_entries = cls._module_preprocessor_objs.get(plugin_name, [])
+            if preprocessor_entries:
+                func_ids_with_scene = set(preprocessor_entries)
+                for scene_bit in cls._preprocessors:
+                    original_len = len(cls._preprocessors[scene_bit])
+                    cls._preprocessors[scene_bit] = [
+                        func
+                        for func in cls._preprocessors[scene_bit]
+                        if (id(func), scene_bit) not in func_ids_with_scene
+                    ]
+                    result["preprocessors"] += original_len - len(
+                        cls._preprocessors[scene_bit]
+                    )
+            else:
+                preprocessor_names = cls._module_preprocessors.get(plugin_name, [])
+                for scene_bit in cls._preprocessors:
+                    original_len = len(cls._preprocessors[scene_bit])
+                    cls._preprocessors[scene_bit] = [
+                        func
+                        for func in cls._preprocessors[scene_bit]
+                        if func.__name__ not in preprocessor_names
+                    ]
+                    result["preprocessors"] += original_len - len(
+                        cls._preprocessors[scene_bit]
+                    )
+
             del cls._module_preprocessors[plugin_name]
+            cls._module_preprocessor_objs.pop(plugin_name, None)
 
         cls._module_paths.pop(plugin_name, None)
 
@@ -803,7 +883,7 @@ class Plugins:
     @classmethod
     def _reload_module(
         cls, module_path: Path | str, plugins_dir: str | Path = "plugins"
-    ) -> dict:
+    ) -> PluginReloadResult:
         """
         热重载指定插件模块（内部方法）
 
@@ -877,7 +957,7 @@ class Plugins:
         return result
 
     @classmethod
-    def clear_all_plugins(cls) -> dict[str, int]:
+    def clear_all_plugins(cls) -> PluginStats:
         """
         清空所有已注册的命令和预处理器
 
@@ -890,9 +970,11 @@ class Plugins:
         }
         cls._commands.clear()
         cls._module_commands.clear()
+        cls._module_command_objs.clear()
         for scene_bit in cls._preprocessors:
             cls._preprocessors[scene_bit].clear()
         cls._module_preprocessors.clear()
+        cls._module_preprocessor_objs.clear()
         cls._command_to_module.clear()
         cls._module_paths.clear()
         return result

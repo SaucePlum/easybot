@@ -44,10 +44,8 @@ def main():
         # ----- 通过文件路径发送（仅频道） -----
         if msg.treated_msg == "图片路径":
             await msg.reply(
-                MessagesModel.Message(
-                    content="这是通过文件路径发送的本地图片",
-                    file_image="./images/cat.png",  # 仅频道支持
-                )
+                "这是通过文件路径发送的本地图片",
+                file_image="./images/cat.png",
             )
 
         # ----- 通过 bytes 发送（仅频道） -----
@@ -56,37 +54,29 @@ def main():
                 image_bytes = f.read()
 
             await msg.reply(
-                MessagesModel.Message(
-                    content="这是通过 bytes 发送的本地图片",
-                    file_image=image_bytes,  # 仅频道支持
-                )
+                "这是通过 bytes 发送的本地图片",
+                file_image=image_bytes,
             )
 
         # ----- 通过文件对象发送（仅频道） -----
         elif msg.treated_msg == "图片文件对象":
             with open("./images/bird.png", "rb") as f:
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="这是通过文件对象发送的本地图片",
-                        file_image=f,  # 仅频道支持
-                    )
+                    "这是通过文件对象发送的本地图片",
+                    file_image=f,
                 )
 
         # ----- 通过网络 URL 发送（仅频道） -----
         elif msg.treated_msg == "网络图片":
             await msg.reply(
-                MessagesModel.Message(
-                    content="这是网络图片",
-                    image="https://example.com/image.png",  # 仅频道支持
-                )
+                "这是网络图片",
+                image="https://example.com/image.png",
             )
 
         # ----- 仅发送图片，无文本（仅频道） -----
         elif msg.treated_msg == "仅图片":
             await msg.reply(
-                MessagesModel.Message(
-                    file_image="./images/only_image.png"  # 仅频道支持
-                )
+                file_image="./images/only_image.png",
             )
 
     # ==================== 7.2 群聊发送图片（必须使用 upload_media） ====================
@@ -114,10 +104,8 @@ def main():
 
                 # 步骤2：发送消息引用媒体
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="群聊图片（本地文件）",
-                        media_file_info=result.file_info,
-                    )
+                    "群聊图片（本地文件）",
+                    media_file_info=result.file_info,
                 )
 
             except FileNotFoundError:
@@ -140,10 +128,8 @@ def main():
 
                 # 步骤2：发送消息引用媒体
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="群聊图片（网络URL）",
-                        media_file_info=result.file_info,
-                    )
+                    "群聊图片（网络URL）",
+                    media_file_info=result.file_info,
                 )
 
             except Exception as e:
@@ -168,10 +154,8 @@ def main():
 
                 # 步骤2：发送消息
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="群聊图片（bytes）",
-                        media_file_info=result.file_info,
-                    )
+                    "群聊图片（bytes）",
+                    media_file_info=result.file_info,
                 )
 
             except Exception as e:
@@ -202,10 +186,8 @@ def main():
 
                 # 步骤2：发送消息引用媒体
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="私信图片（本地文件）",
-                        media_file_info=result.file_info,
-                    )
+                    "私信图片（本地文件）",
+                    media_file_info=result.file_info,
                 )
 
             except FileNotFoundError:
@@ -228,10 +210,8 @@ def main():
 
                 # 步骤2：发送消息引用媒体
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="私信图片（网络URL）",
-                        media_file_info=result.file_info,
-                    )
+                    "私信图片（网络URL）",
+                    media_file_info=result.file_info,
                 )
 
             except Exception as e:
@@ -254,10 +234,8 @@ def main():
 
                 # 步骤2：发送
                 await msg.reply(
-                    MessagesModel.Message(
-                        content="私信图片（bytes）",
-                        media_file_info=result.file_info,
-                    )
+                    "私信图片（bytes）",
+                    media_file_info=result.file_info,
                 )
 
             except Exception as e:

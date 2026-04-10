@@ -11,7 +11,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ..plugins import CommandValidScenes, Plugins
+from ..models import BaseModel, Model
+from ..plugins import BotCommandObject, CommandValidScenes, Plugins
 from .constants import C2C_EVENTS, DIRECT_MESSAGE_EVENTS, GROUP_EVENTS, convert_to_model
 from .dedup import DedupConfig, MessageDeduplicator
 from .event_utils import check_sandbox
@@ -19,6 +20,7 @@ from .message_utils import check_user_is_admin, treat_message_content
 
 if TYPE_CHECKING:
     from ..bot import Bot
+    from ..logger import Logger
 
 
 @dataclass
@@ -32,6 +34,9 @@ class DispatchResult:
     no_handler: bool = False
 
 
+DEFAULT_MAX_CONCURRENCY = 64
+
+
 class EventDispatcher:
     """
     统一事件分发器
@@ -42,15 +47,24 @@ class EventDispatcher:
     - 模型转换
     - 调用用户注册的事件处理器
     - 异常捕获与日志记录
+    - 并发控制（Semaphore 限流，防止消息洪峰压垮事件循环）
     """
 
-    __slots__ = ("_bot", "_logger", "_dedup_config", "_deduplicator")
+    __slots__ = (
+        "_bot",
+        "_logger",
+        "_dedup_config",
+        "_deduplicator",
+        "_semaphore",
+        "_active_tasks",
+    )
 
     def __init__(
         self,
         bot: "Bot",
-        logger: Any,
+        logger: "Logger",
         dedup_config: DedupConfig | None = None,
+        max_concurrency: int = DEFAULT_MAX_CONCURRENCY,
     ):
         self._bot = bot
         self._logger = logger
@@ -63,6 +77,8 @@ class EventDispatcher:
             if self._dedup_config.enabled
             else None
         )
+        self._semaphore = asyncio.Semaphore(max_concurrency)
+        self._active_tasks: set[asyncio.Task] = set()
 
     async def dispatch(
         self,
@@ -114,7 +130,8 @@ class EventDispatcher:
 
         # 3. 模型转换
         model = convert_to_model(
-            event_type, data, self._bot.api, event_id=event_id, seq=seq, opcode=opcode
+            event_type, data, self._bot.api, event_id=event_id, seq=seq, opcode=opcode,
+            logger=self._logger,
         )
 
         # 4. 插件系统处理
@@ -136,13 +153,13 @@ class EventDispatcher:
             )
 
         # 6. 安全调用处理器
-        asyncio.create_task(
+        self._create_tracked_task(
             self._safe_call_handler(event_type, handler, model if model else data)
         )
 
         return DispatchResult(dispatched=True, event_type=event_type)
 
-    async def _process_plugin_system(self, event_type: str, model: Any) -> bool:
+    async def _process_plugin_system(self, event_type: str, model: BaseModel) -> bool:
         """处理插件系统逻辑
 
         Returns:
@@ -187,7 +204,7 @@ class EventDispatcher:
             case _:
                 return None
 
-    def _get_max_command_length(self, cmd_obj: Any) -> int:
+    def _get_max_command_length(self, cmd_obj: BotCommandObject) -> int:
         """
         获取命令对象中命令字符串的最大长度
 
@@ -213,7 +230,7 @@ class EventDispatcher:
             return max(len(c) for c in actual_commands) if actual_commands else 0
         return 0
 
-    async def _process_commands(self, scene_bit: int, model: Any) -> bool:
+    async def _process_commands(self, scene_bit: int, model: BaseModel) -> bool:
         """
         处理命令匹配和执行
 
@@ -266,7 +283,7 @@ class EventDispatcher:
         ]
 
         # 收集所有能匹配的命令及其匹配信息
-        candidates: list[tuple[Any, str, int]] = []
+        candidates: list[tuple[BotCommandObject, str, int]] = []
         for cmd in valid_commands:
             if cmd.at:
                 if not self._check_message_contains_at(model):
@@ -314,6 +331,41 @@ class EventDispatcher:
                     return True
                 return False
 
+        # 匹配完成后，统一处理 treat：截取命令后的内容更新 treated_msg
+        raw_content = getattr(model, "content", "")
+        if best_cmd.command and best_cmd.treat:
+            # best_matched 是匹配到的具体命令字符串
+            command = best_matched
+            # 所有命令统一从当前 treated_msg 中截取
+            # treated_msg 已经经过预处理：去除了 / 和 @机器人 提及
+            treated_msg = getattr(model, "treated_msg", raw_content)
+            msg = (
+                treated_msg
+                if best_cmd.treat and isinstance(treated_msg, str)
+                else raw_content
+            )
+            new_value = msg.strip()[len(command) :].strip()
+            model.treated_msg = new_value
+            if model._raw_data is not None:
+                model._raw_data["treated_msg"] = new_value
+        elif best_cmd.regex and best_cmd.treat:
+            # 正则命令需要重新匹配获取分组
+            treated_msg = getattr(model, "treated_msg", raw_content)
+            msg = (
+                treated_msg
+                if best_cmd.treat and isinstance(treated_msg, str)
+                else raw_content
+            )
+            for regex in best_cmd.regex:
+                match = regex.match(msg)
+                if match:
+                    if not hasattr(model, "treated_msg"):
+                        model.treated_msg = ""
+                    model.treated_msg = match.groups()
+                    if model._raw_data is not None:
+                        model._raw_data["treated_msg"] = model.treated_msg
+                    break
+
         # 执行命令
         try:
             should_short_circuit = False
@@ -323,7 +375,7 @@ class EventDispatcher:
                     result = await self._execute_command_with_result(best_cmd, model)
                     should_short_circuit = bool(result)
                 else:
-                    asyncio.create_task(
+                    self._create_tracked_task(
                         self._execute_command_async(best_cmd, model)
                     ).add_done_callback(self._on_command_task_done)
                     should_short_circuit = best_cmd.short_circuit
@@ -341,7 +393,9 @@ class EventDispatcher:
 
         return False
 
-    async def _execute_command_with_result(self, cmd: Any, model: Any) -> Any:
+    async def _execute_command_with_result(
+        self, cmd: BotCommandObject, model: BaseModel
+    ) -> bool | None:
         """
         异步执行命令回调并返回结果
 
@@ -364,24 +418,56 @@ class EventDispatcher:
             self._logger.exception(f"命令执行错误: {e}")
             return None
 
-    async def _execute_command_async(self, cmd: Any, model: Any) -> None:
+    async def _execute_command_async(
+        self, cmd: BotCommandObject, model: BaseModel
+    ) -> None:
         """
         异步执行命令回调（fire-and-forget 模式）
 
-        用于不需要获取返回值的场景，异常由内部捕获并记录
+        用于不需要获取返回值的场景，异常由内部捕获并记录。
+        通过 Semaphore 控制并发数，防止消息洪峰时突发创建过多并发协程。
 
         Args:
             cmd: 命令对象
             model: 消息模型
         """
-        try:
-            sig = inspect.signature(cmd.func)
-            if "session" in sig.parameters:
-                await cmd.func(model, session=self._bot.session)
-            else:
-                await cmd.func(model)
-        except Exception as e:
-            self._logger.exception(f"命令执行错误: {e}")
+        async with self._semaphore:
+            try:
+                sig = inspect.signature(cmd.func)
+                if "session" in sig.parameters:
+                    await cmd.func(model, session=self._bot.session)
+                else:
+                    await cmd.func(model)
+            except Exception as e:
+                self._logger.exception(f"命令执行错误: {e}")
+
+    def _create_tracked_task(self, coro) -> asyncio.Task:
+        """创建被追踪的异步任务
+
+        通过 _active_tasks 集合追踪所有由分发器创建的任务，
+        确保在关闭时可以统一取消，防止孤儿任务泄露。
+        任务完成后自动从集合中移除。
+        """
+        task = asyncio.create_task(coro)
+        self._active_tasks.add(task)
+        task.add_done_callback(self._active_tasks.discard)
+        return task
+
+    async def cancel_all(self) -> None:
+        """取消所有活跃的事件处理任务
+
+        在 Bot 关闭时调用，确保所有正在执行的事件处理器被优雅取消，
+        避免孤儿任务在后台继续运行。
+        """
+        if not self._active_tasks:
+            return
+
+        for task in self._active_tasks:
+            task.cancel()
+
+        await asyncio.gather(*self._active_tasks, return_exceptions=True)
+        self._active_tasks.clear()
+        self._logger.debug(f"已取消所有事件处理任务")
 
     def _on_command_task_done(self, task: asyncio.Task[None]) -> None:
         """
@@ -397,7 +483,7 @@ class EventDispatcher:
         if exception:
             self._logger.exception(f"异步任务执行出现未捕获的异常: {exception}")
 
-    def _check_message_contains_at(self, model: Any) -> bool:
+    def _check_message_contains_at(self, model: BaseModel) -> bool:
         """检查消息是否包含艾特机器人"""
         if not self._bot.bot_id:
             return False
@@ -406,7 +492,7 @@ class EventDispatcher:
             f"<@!{self._bot.bot_id}>" in content or f"<@{self._bot.bot_id}>" in content
         )
 
-    def _check_user_admin(self, model: Any) -> bool:
+    def _check_user_admin(self, model: BaseModel) -> bool:
         """检查用户是否为频道管理员"""
 
         member = getattr(model, "member", None)
@@ -415,7 +501,7 @@ class EventDispatcher:
             return check_user_is_admin(roles)
         return False
 
-    def _get_user_id(self, model: Any) -> str | None:
+    def _get_user_id(self, model: BaseModel) -> str | None:
         """获取用户ID"""
         author = getattr(model, "author", None)
         if author:
@@ -428,7 +514,7 @@ class EventDispatcher:
             )
         return None
 
-    async def _reply_error(self, model: Any, error_msg: str) -> None:
+    async def _reply_error(self, model: BaseModel, error_msg: str) -> None:
         """回复错误消息"""
         reply_method = getattr(model, "reply", None)
         if reply_method:
@@ -437,46 +523,52 @@ class EventDispatcher:
             except Exception as e:
                 self._logger.error(f"回复错误消息失败: {e}")
 
-    def _match_command(self, cmd: Any, model: Any) -> tuple[str, int] | None:
+    def _match_command(
+        self, cmd: BotCommandObject, model: BaseModel
+    ) -> tuple[str, int] | None:
         """
         匹配命令，返回 (匹配的命令字符串, 匹配长度) 或 None
 
         使用最长匹配优先策略：返回实际匹配到的命令及其长度，
         供调用方选择最优匹配。
+
+        由于 treat_message_content 已经去除了开头的 / 和 @机器人 提及，
+        所有命令都统一使用 treated_msg 进行匹配即可。
         """
         raw_content = getattr(model, "content", "")
+        # 保存原始 treated_msg 状态，匹配过程不修改
+        initial_treated_msg = getattr(model, "treated_msg", None)
 
         if cmd.command:
             for command in cmd.command:
-                if command.startswith("/"):
-                    if raw_content.strip().startswith(command):
-                        if cmd.treat:
-                            if hasattr(model, "content"):
-                                if not hasattr(model, "treated_msg"):
-                                    model.treated_msg = ""
-                                model.treated_msg = raw_content.strip()[
-                                    len(command) :
-                                ].strip()
-                                if model._raw_data is not None:
-                                    model._raw_data["treated_msg"] = model.treated_msg
-                        return (command, len(command))
-                else:
-                    treated_msg = getattr(model, "treated_msg", raw_content)
-                    msg = treated_msg if cmd.treat else raw_content
-                    if msg.strip().startswith(command):
-                        return (command, len(command))
+                # 获取用于匹配的文本
+                # treated_msg 已经经过处理：去除了 / 和 @，直接用于匹配
+                treated_msg = (
+                    initial_treated_msg
+                    if initial_treated_msg is not None
+                    else raw_content
+                )
+                # 如果 treated_msg 是元组（之前正则匹配的结果），则使用原始内容
+                msg = (
+                    treated_msg
+                    if cmd.treat and isinstance(treated_msg, str)
+                    else raw_content
+                )
+                if msg.strip().startswith(command):
+                    return (command, len(command))
         elif cmd.regex:
-            treated_msg = getattr(model, "treated_msg", raw_content)
-            msg = treated_msg if cmd.treat else raw_content
+            treated_msg = (
+                initial_treated_msg if initial_treated_msg is not None else raw_content
+            )
+            # 如果 treated_msg 是元组（之前正则匹配的结果），则使用原始内容
+            msg = (
+                treated_msg
+                if cmd.treat and isinstance(treated_msg, str)
+                else raw_content
+            )
             for regex in cmd.regex:
                 match = regex.match(msg)
                 if match:
-                    if cmd.treat:
-                        if not hasattr(model, "treated_msg"):
-                            model.treated_msg = ""
-                        model.treated_msg = match.groups()
-                        if model._raw_data is not None:
-                            model._raw_data["treated_msg"] = model.treated_msg
                     matched_str = match.group(0)
                     return (regex.pattern, len(matched_str))
 
@@ -486,13 +578,18 @@ class EventDispatcher:
         self,
         event_type: str,
         handler: Callable,
-        data: Any,
+        data: BaseModel | dict[str, Any],
     ) -> None:
-        """安全调用事件处理器，捕获异常并记录日志"""
-        try:
-            if asyncio.iscoroutinefunction(handler):
-                await handler(data)
-            else:
-                handler(data)
-        except Exception as e:
-            self._logger.exception(f"事件处理器执行错误 [{event_type}]: {e}")
+        """安全调用事件处理器，捕获异常并记录日志
+
+        通过 Semaphore 控制并发数，防止消息洪峰时突发创建过多并发协程。
+        等待 Semaphore 的协程内存开销极小（~KB 级），不会造成内存压力。
+        """
+        async with self._semaphore:
+            try:
+                if asyncio.iscoroutinefunction(handler):
+                    await handler(data)
+                else:
+                    handler(data)
+            except Exception as e:
+                self._logger.exception(f"事件处理器执行错误 [{event_type}]: {e}")

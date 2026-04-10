@@ -29,6 +29,7 @@ Bot(
     auto_load_plugins: bool = False,          # 自动加载插件目录
     plugins_dir: str = "plugins",              # 插件目录路径
     plugins_recursive: bool = False,          # 递归扫描子目录
+    max_concurrency: int = 64,                # 事件处理器/命令最大并发数
 ) -> Bot
 ```
 
@@ -85,7 +86,7 @@ bot.start()
 await bot.start_async()
 ```
 
-执行流程：设置运行标志 → 启动会话管理器 → 运行协议连接。
+执行流程：设置运行标志 → 初始化机器人管理员管理器 → 启动会话管理器 → 运行协议连接。
 
 #### stop() / stop_async()
 
@@ -99,7 +100,7 @@ bot.stop()
 await bot.stop_async()
 ```
 
-清理内容：触发关闭事件 → 关闭 HTTP 客户端 → 停止协议连接。
+清理内容：触发关闭事件 → 停止会话管理器后台任务 → 关闭 HTTP 客户端 → 停止协议连接。
 
 #### 异步上下文管理器
 
@@ -112,24 +113,59 @@ async with bot:
 # 自动调用 stop_async()
 ```
 
-### 1.4 属性访问器
+### 1.4 公共属性
 
-| 属性 | 类型 | 说明 |
-|------|------|------|
-| `bot.bot_id` | `str \| None` | 机器人实际 ID（启动后获取） |
-| `bot.api` | `API` | API 调用实例 |
-| `bot.session` | `SessionManager` | 会话管理器 |
-| `bot.bot_admin_manager` | `BotAdminManager` | 机器人管理员管理器 |
-| `bot.protocol` | `Protocol` | 连接协议实例 |
-| `bot.logger` | `Logger` | 日志记录器 |
-| `bot.sandbox` | `SandBox \| None` | 沙箱配置 |
+Bot 同时提供公开实例属性和 `@property` 属性访问器：
+
+| 属性 | 类型 | 说明 | 形式 |
+|------|------|------|------|
+| `bot.bot_id` | `str \| None` | 机器人实际 ID（启动后获取） | `@property` |
+| `bot.api` | `API` | API 调用实例 | 公开实例属性 |
+| `bot.session` | `SessionManager` | 会话管理器 | `@property` |
+| `bot.bot_admin_manager` | `BotAdminManager` | 机器人管理员管理器 | `@property` |
+| `bot.protocol` | `Protocol` | 连接协议实例 | 公开实例属性 |
+| `bot.logger` | `Logger` | 日志记录器 | 公开实例属性 |
+| `bot.sandbox` | `SandBox \| None` | 沙箱配置 | 公开实例属性 |
+
+### 1.5 命令相关方法
+
+| 方法 | 说明 |
+|------|------|
+| `before_command(valid_scenes=...)` | 注册命令预处理器，在所有命令检查前执行 |
+| `on_command(...)` | 注册命令处理器，支持命令名、正则、权限、场景和启停控制 |
+
+```python
+@bot.before_command(valid_scenes=CommandValidScenes.ALL)
+async def preprocessor(
+    msg: Model.Message,
+):
+    bot.logger.info(f"收到消息: {msg.treated_msg}")
+
+@bot.on_command(command=["help", "帮助"], valid_scenes=CommandValidScenes.ALL)
+async def help_command(
+    msg: Model.Message,
+):
+    await msg.reply("帮助信息")
+```
+
+### 1.6 插件管理方法
+
+Bot 提供完整的插件与命令管理能力：
+
+| 分类 | 方法 |
+|------|------|
+| 加载与热重载 | `load_plugins()`、`reload_plugin()`、`reload_all_plugins()`、`unload_plugin()` |
+| 查询 | `get_loaded_plugins()`、`get_all_commands()`、`find_command()` |
+| 启停控制 | `enable_command()`、`disable_command()`、`is_command_enabled()`、`remove_command()` |
+| 插件明细 | `get_plugin_commands()`、`get_plugin_preprocessors()`、`clear_all_plugins()` |
 
 ---
 
 ## 二、Protocol 协议类
 
 **模块**: `easybot.protocol`  
-**导入**: `from easybot import Proto`
+**导入**: `from easybot import Proto`  
+**具体协议类**: `from easybot.protocol import Protocol, WebSocketProtocol, WebhookProtocol, RemoteWebhookProtocol`
 
 Protocol 负责与 QQ 开放平台建立连接，支持三种协议模式。
 
@@ -198,6 +234,24 @@ bot = Bot(
 )
 ```
 
+### 2.5 公开协议类与常用属性
+
+| 项目 | 说明 |
+|------|------|
+| `Protocol` | 协议基类，定义 `run()` / `stop()` 生命周期 |
+| `WebSocketProtocol` | WebSocket 协议配置对象 |
+| `WebhookProtocol` | Webhook 协议配置对象，常用属性：`webhook_path`、`ws_path` |
+| `RemoteWebhookProtocol` | 远程 Webhook 协议配置对象，常用属性：`ws_url` |
+
+```python
+webhook_proto = Proto.webhook(port=8080, path="/bot")
+print(webhook_proto.webhook_path)  # /bot
+print(webhook_proto.ws_path)       # /bot/ws
+
+remote_proto = Proto.remote_webhook(url="https://example.com")
+print(remote_proto.ws_url)         # wss://example.com/ws
+```
+
 ---
 
 ## 三、SandBox 沙箱类
@@ -254,6 +308,16 @@ bot = Bot(
 )
 ```
 
+### 3.4 检查方法
+
+SandBox 还提供三个检查方法，用于手动判断目标是否通过沙箱规则：
+
+```python
+sandbox.check_guild("guild_id", is_sandbox=True)
+sandbox.check_group("group_openid", is_sandbox=True)
+sandbox.check_user("user_id", is_sandbox=True, is_qq=False)
+```
+
 ---
 
 ## 四、事件装饰器
@@ -264,26 +328,26 @@ bot = Bot(
 
 #### 频道消息
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_guild_message` | `AT_MESSAGE_CREATE` | 频道 @机器人消息（公域） |
-| `@bot.on_guild_full_message` | `MESSAGE_CREATE` | 频道全量消息（**仅私域**） |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_guild_message` | `AT_MESSAGE_CREATE` | `Model.GuildMessage` | 频道 @机器人消息（公域） |
+| `@bot.on_guild_full_message` | `MESSAGE_CREATE` | `Model.GuildMessage` | 频道全量消息（**仅私域**） |
 
 #### 群聊/单聊/私信
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_group_message` | `GROUP_AT_MESSAGE_CREATE` | 群聊 @机器人消息 |
-| `@bot.on_c2c_message` | `C2C_MESSAGE_CREATE` | QQ 单聊消息 |
-| `@bot.on_direct_message` | `DIRECT_MESSAGE_CREATE` | 频道私信消息 |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_group_message` | `GROUP_AT_MESSAGE_CREATE` | `Model.GroupMessage` | 群聊 @机器人消息 |
+| `@bot.on_c2c_message` | `C2C_MESSAGE_CREATE` | `Model.C2CMessage` | QQ 单聊消息 |
+| `@bot.on_direct_message` | `DIRECT_MESSAGE_CREATE` | `Model.DirectMessage` | 频道私信消息 |
 
 #### 消息删除事件
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_message_delete` | `MESSAGE_DELETE` | 消息删除（**仅私域**） |
-| `@bot.on_public_message_delete` | `PUBLIC_MESSAGE_DELETE` | 公域消息删除 |
-| `@bot.on_direct_message_delete` | `DIRECT_MESSAGE_DELETE` | 私信消息删除 |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_message_delete` | `MESSAGE_DELETE` | `Model.MessageDelete` | 消息删除（**仅私域**） |
+| `@bot.on_public_message_delete` | `PUBLIC_MESSAGE_DELETE` | `Model.MessageDelete` | 公域消息删除 |
+| `@bot.on_direct_message_delete` | `DIRECT_MESSAGE_DELETE` | `Model.MessageDelete` | 私信消息删除 |
 
 **使用示例**：
 
@@ -305,64 +369,76 @@ bot.start()
 
 ### 4.2 频道/成员事件
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_guild_create` | `GUILD_CREATE` | 加入频道 |
-| `@bot.on_guild_update` | `GUILD_UPDATE` | 频道信息更新 |
-| `@bot.on_guild_delete` | `GUILD_DELETE` | 退出频道 |
-| `@bot.on_channel_create` | `CHANNEL_CREATE` | 子频道创建 |
-| `@bot.on_channel_update` | `CHANNEL_UPDATE` | 子频道更新 |
-| `@bot.on_channel_delete` | `CHANNEL_DELETE` | 子频道删除 |
-| `@bot.on_guild_member_add` | `GUILD_MEMBER_ADD` | 成员加入 |
-| `@bot.on_guild_member_update` | `GUILD_MEMBER_UPDATE` | 成员信息变更 |
-| `@bot.on_guild_member_remove` | `GUILD_MEMBER_REMOVE` | 成员退出 |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_guild_create` | `GUILD_CREATE` | `Model.Guild` | 加入频道 |
+| `@bot.on_guild_update` | `GUILD_UPDATE` | `Model.Guild` | 频道信息更新 |
+| `@bot.on_guild_delete` | `GUILD_DELETE` | `Model.Guild` | 退出频道 |
+| `@bot.on_channel_create` | `CHANNEL_CREATE` | `Model.Channel` | 子频道创建 |
+| `@bot.on_channel_update` | `CHANNEL_UPDATE` | `Model.Channel` | 子频道更新 |
+| `@bot.on_channel_delete` | `CHANNEL_DELETE` | `Model.Channel` | 子频道删除 |
+| `@bot.on_guild_member_add` | `GUILD_MEMBER_ADD` | `Model.MemberWithGuildID` | 成员加入 |
+| `@bot.on_guild_member_update` | `GUILD_MEMBER_UPDATE` | `Model.MemberWithGuildID` | 成员信息变更 |
+| `@bot.on_guild_member_remove` | `GUILD_MEMBER_REMOVE` | `Model.MemberWithGuildID` | 成员退出 |
 
 ### 4.3 群聊/好友事件
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_group_add` | `GROUP_ADD_ROBOT` | 加入群聊 |
-| `@bot.on_group_delete` | `GROUP_DEL_ROBOT` | 退出群聊 |
-| `@bot.on_group_msg_reject` | `GROUP_MSG_REJECT` | 群消息被拒 |
-| `@bot.on_group_msg_receive` | `GROUP_MSG_RECEIVE` | 群消息被接收 |
-| `@bot.on_friend_add` | `FRIEND_ADD` | 添加好友 |
-| `@bot.on_friend_delete` | `FRIEND_DEL` | 删除好友 |
-| `@bot.on_c2c_msg_reject` | `C2C_MSG_REJECT` | 私聊被拒 |
-| `@bot.on_c2c_msg_receive` | `C2C_MSG_RECEIVE` | 私聊被接收 |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_group_add` | `GROUP_ADD_ROBOT` | `Model.GroupEvent` | 加入群聊 |
+| `@bot.on_group_delete` | `GROUP_DEL_ROBOT` | `Model.GroupEvent` | 退出群聊 |
+| `@bot.on_group_msg_reject` | `GROUP_MSG_REJECT` | `Model.GroupEvent` | 群消息被拒 |
+| `@bot.on_group_msg_receive` | `GROUP_MSG_RECEIVE` | `Model.GroupEvent` | 群消息被接收 |
+| `@bot.on_friend_add` | `FRIEND_ADD` | `Model.FriendEvent` | 添加好友 |
+| `@bot.on_friend_delete` | `FRIEND_DEL` | `Model.FriendEvent` | 删除好友 |
+| `@bot.on_c2c_msg_reject` | `C2C_MSG_REJECT` | `Model.FriendEvent` | 私聊被拒 |
+| `@bot.on_c2c_msg_receive` | `C2C_MSG_RECEIVE` | `Model.FriendEvent` | 私聊被接收 |
 
 ### 4.4 论坛事件
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_forum_thread_create` | `FORUM_THREAD_CREATE` | 帖子创建（**仅私域**） |
-| `@bot.on_forum_thread_update` | `FORUM_THREAD_UPDATE` | 帖子更新 |
-| `@bot.on_forum_thread_delete` | `FORUM_THREAD_DELETE` | 帖子删除 |
-| `@bot.on_forum_post_create` | `FORUM_POST_CREATE` | 评论创建 |
-| `@bot.on_forum_post_delete` | `FORUM_POST_DELETE` | 评论删除 |
-| `@bot.on_forum_reply_create` | `FORUM_REPLY_CREATE` | 回复创建 |
-| `@bot.on_forum_reply_delete` | `FORUM_REPLY_DELETE` | 回复删除 |
-| `@bot.on_forum_publish_audit_result` | `FORUM_PUBLISH_AUDIT_RESULT` | 帖子审核结果 |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_forum_thread_create` | `FORUM_THREAD_CREATE` | `Model.Thread` | 帖子创建（**仅私域**） |
+| `@bot.on_forum_thread_update` | `FORUM_THREAD_UPDATE` | `Model.Thread` | 帖子更新 |
+| `@bot.on_forum_thread_delete` | `FORUM_THREAD_DELETE` | `Model.Thread` | 帖子删除 |
+| `@bot.on_forum_post_create` | `FORUM_POST_CREATE` | `Model.Post` | 评论创建 |
+| `@bot.on_forum_post_delete` | `FORUM_POST_DELETE` | `Model.Post` | 评论删除 |
+| `@bot.on_forum_reply_create` | `FORUM_REPLY_CREATE` | `Model.Reply` | 回复创建 |
+| `@bot.on_forum_reply_delete` | `FORUM_REPLY_DELETE` | `Model.Reply` | 回复删除 |
+| `@bot.on_forum_publish_audit_result` | `FORUM_PUBLISH_AUDIT_RESULT` | `Model.AuditResult` | 帖子审核结果 |
 
-### 4.5 音频/互动事件
+### 4.5 开放论坛事件
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_audio_start` | `AUDIO_START` | 音频开始播放 |
-| `@bot.on_audio_finish` | `AUDIO_FINISH` | 音频播放结束 |
-| `@bot.on_audio_on_mic` | `AUDIO_ON_MIC` | 上麦事件 |
-| `@bot.on_audio_off_mic` | `AUDIO_OFF_MIC` | 下麦事件 |
-| `@bot.on_audio_or_live_channel_member_enter` | `AUDIO_OR_LIVE_CHANNEL_MEMBER_ENTER` | 进入音视频/直播频道 |
-| `@bot.on_audio_or_live_channel_member_exit` | `AUDIO_OR_LIVE_CHANNEL_MEMBER_EXIT` | 离开音视频/直播频道 |
-| `@bot.on_interaction` | `INTERACTION_CREATE` | 互动按钮回调 |
-| `@bot.on_reaction_add` | `MESSAGE_REACTION_ADD` | 表情表态添加 |
-| `@bot.on_reaction_remove` | `MESSAGE_REACTION_REMOVE` | 表情表态移除 |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_open_forum_thread_create` | `OPEN_FORUM_THREAD_CREATE` | `Model.OpenForumEvent` | 开放论坛帖子创建 |
+| `@bot.on_open_forum_thread_update` | `OPEN_FORUM_THREAD_UPDATE` | `Model.OpenForumEvent` | 开放论坛帖子更新 |
+| `@bot.on_open_forum_thread_delete` | `OPEN_FORUM_THREAD_DELETE` | `Model.OpenForumEvent` | 开放论坛帖子删除 |
+| `@bot.on_open_forum_post_create` | `OPEN_FORUM_POST_CREATE` | `Model.OpenForumEvent` | 开放论坛评论创建 |
+| `@bot.on_open_forum_post_delete` | `OPEN_FORUM_POST_DELETE` | `Model.OpenForumEvent` | 开放论坛评论删除 |
+| `@bot.on_open_forum_reply_create` | `OPEN_FORUM_REPLY_CREATE` | `Model.OpenForumEvent` | 开放论坛回复创建 |
+| `@bot.on_open_forum_reply_delete` | `OPEN_FORUM_REPLY_DELETE` | `Model.OpenForumEvent` | 开放论坛回复删除 |
 
-### 4.6 审核事件
+### 4.6 音频/互动事件
 
-| 装饰器 | 事件类型 | 说明 |
-|--------|---------|------|
-| `@bot.on_message_audit_pass` | `MESSAGE_AUDIT_PASS` | 消息审核通过 |
-| `@bot.on_message_audit_reject` | `MESSAGE_AUDIT_REJECT` | 消息审核拒绝 |
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_audio_start` | `AUDIO_START` | `Model.AudioAction` | 音频开始播放 |
+| `@bot.on_audio_finish` | `AUDIO_FINISH` | `Model.AudioAction` | 音频播放结束 |
+| `@bot.on_audio_on_mic` | `AUDIO_ON_MIC` | `Model.AudioAction` | 上麦事件 |
+| `@bot.on_audio_off_mic` | `AUDIO_OFF_MIC` | `Model.AudioAction` | 下麦事件 |
+| `@bot.on_audio_or_live_channel_member_enter` | `AUDIO_OR_LIVE_CHANNEL_MEMBER_ENTER` | `Model.LiveChannelMember` | 进入音视频/直播频道 |
+| `@bot.on_audio_or_live_channel_member_exit` | `AUDIO_OR_LIVE_CHANNEL_MEMBER_EXIT` | `Model.LiveChannelMember` | 离开音视频/直播频道 |
+| `@bot.on_interaction` | `INTERACTION_CREATE` | `Model.Interaction` | 互动按钮回调 |
+| `@bot.on_reaction_add` | `MESSAGE_REACTION_ADD` | `Model.MessageReaction` | 表情表态添加 |
+| `@bot.on_reaction_remove` | `MESSAGE_REACTION_REMOVE` | `Model.MessageReaction` | 表情表态移除 |
+
+### 4.7 审核事件
+
+| 装饰器 | 事件类型 | Callback 类型 | 说明 |
+|--------|---------|--------------|------|
+| `@bot.on_message_audit_pass` | `MESSAGE_AUDIT_PASS` | `Model.MessageAudited` | 消息审核通过 |
+| `@bot.on_message_audit_reject` | `MESSAGE_AUDIT_REJECT` | `Model.MessageAudited` | 消息审核拒绝 |
 
 ---
 
@@ -370,11 +446,11 @@ bot.start()
 
 SDK 提供三个批量订阅装饰器，用于一次性订阅多个事件：
 
-| 装饰器 | 说明 | 适用场景 |
-|--------|------|---------|
-| `@bot.on_all_intent_events` | 订阅所有机器人事件 | 全量事件监控 |
-| `@bot.on_default_public_events` | 订阅公域机器人默认事件 | 公域机器人 |
-| `@bot.on_default_private_events` | 订阅私域机器人默认事件 | 私域机器人 |
+| 装饰器 | Callback 类型 | 说明 | 适用场景 |
+|--------|--------------|------|---------|
+| `@bot.on_all_intent_events` | `Model.BaseModel` | 订阅所有机器人事件 | 全量事件监控 |
+| `@bot.on_default_public_events` | `Model.BaseModel` | 订阅公域机器人默认事件 | 公域机器人 |
+| `@bot.on_default_private_events` | `Model.BaseModel` | 订阅私域机器人默认事件 | 私域机器人 |
 
 **使用示例**：
 
@@ -393,7 +469,15 @@ async def handle_all_events(event: Model.BaseModel) -> None:
 
 生命周期装饰器用于注册机器人启动、关闭和定时任务。
 
-### 6.1 启动事件
+### 6.1 装饰器概览
+
+| 装饰器 | Callback 类型 | 说明 |
+|--------|--------------|------|
+| `@bot.on_startup` | `Model.StartupEvent` | 机器人启动事件 |
+| `@bot.on_shutdown` | `Model.ShutdownEvent` | 机器人关闭事件 |
+| `@bot.on_timer(interval)` | `Model.TimerEvent` | 周期定时任务 |
+
+### 6.2 启动事件
 
 在机器人启动完成后执行：
 
@@ -405,7 +489,7 @@ async def on_startup(event: Model.StartupEvent):
     bot.logger.info(f"机器人名称: {me.username}")
 ```
 
-### 6.2 关闭事件
+### 6.3 关闭事件
 
 在机器人关闭时执行：
 
@@ -415,7 +499,7 @@ async def on_shutdown(event: Model.ShutdownEvent):
     bot.logger.info("机器人正在关闭")
 ```
 
-### 6.3 定时任务
+### 6.4 定时任务
 
 定期执行的定时任务：
 
@@ -452,6 +536,11 @@ async def reply(
     | MessagesModel.MessageArk37
     | MessagesModel.MessageMarkdown,
     reference: bool = False,
+    image: str | None = None,
+    file_image: bytes | BinaryIO | str | None = None,
+    media_file_info: str | None = None,
+    msg_type: int | None = None,
+    is_wakeup: bool = False,
 )
 ```
 
@@ -459,8 +548,13 @@ async def reply(
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `content` | `str \| MessagesModel.Message/MessageEmbed/MessageArk23/24/37/MessageMarkdown` | — | 回复内容，支持文本或任意消息构建器 |
+| `content` | `str \| MessagesModel.Message/MessageEmbed/MessageArk23/24/37/MessageMarkdown \| None` | — | 回复内容，支持文本、普通消息构建器或结构化消息构建器 |
 | `reference` | `bool` | `False` | 是否引用原消息 |
+| `image` | `str \| None` | `None` | 普通消息图片 URL，仅频道/频道私信支持 |
+| `file_image` | `bytes \| BinaryIO \| str \| None` | `None` | 普通消息本地图片，仅频道/频道私信支持 |
+| `media_file_info` | `str \| None` | `None` | 富媒体 file_info，仅群聊/QQ 单聊 v2 支持 |
+| `msg_type` | `int \| None` | `None` | 群聊/QQ 单聊 v2 消息类型，默认自动推断 |
+| `is_wakeup` | `bool` | `False` | 互动召回消息，仅 QQ 单聊 v2 支持 |
 
 ### 7.2 使用示例
 
@@ -476,6 +570,12 @@ async def handle(msg: Model.GuildMessage):
     
     # Embed 消息回复
     await msg.reply(MessagesModel.MessageEmbed(title="标题", content=["内容"]))
+
+    # 普通消息构建器回复
+    await msg.reply(MessagesModel.Message(content="图片", image="https://example.com/image.png"))
+
+    # 频道图片回复
+    await msg.reply("这是一张图片", image="https://example.com/image.png")
     
     # 引用回复
     await msg.reply("回复你", reference=True)
@@ -496,10 +596,18 @@ bot.start()
 | `GroupMessage` | 群聊消息 | `send_group_message` |
 | `C2CMessage` | 单聊消息 | `send_c2c_message` |
 | `DirectMessage` | 频道私信 | `send_direct_message` |
+| `MemberWithGuildID` | `GUILD_MEMBER_ADD / UPDATE / REMOVE` | 被动消息 |
+| `MessageReaction` | `MESSAGE_REACTION_ADD / REMOVE` | 被动消息 |
+| `Thread` | `FORUM_THREAD_CREATE / UPDATE / DELETE` | 被动消息 |
+| `Post` | `FORUM_POST_CREATE / DELETE` | 被动消息 |
+| `Reply` | `FORUM_REPLY_CREATE / DELETE` | 被动消息 |
+| `GroupEvent` | `GROUP_ADD_ROBOT / GROUP_MSG_RECEIVE` | 被动消息 |
+| `FriendEvent` | `FRIEND_ADD / C2C_MSG_RECEIVE` | 被动消息 |
 | `Interaction` | 互动按钮 | 被动消息 |
 | `AudioAction` | 音频事件 | 被动消息 |
 
 > **注意**: `reply()` 会自动选择正确的 API 端点和参数，无需用户关心底层实现。
+> `GUILD_MEMBER_*` 这类事件没有默认子频道目标，调用 `reply()` 时需要显式传入 `channel_id`。
 
 ### 7.4 通过 msg.api / bot.api 访问 API 实例
 
@@ -532,16 +640,61 @@ async def on_startup(event: Model.StartupEvent):
 
 > **注意**: `msg.api` 只能在支持回复的事件模型中使用。`bot.api` 在任意上下文中可用，两者等价。
 
+### 7.5 Model 与 MessagesModel
+
+SDK 还提供两个常用的公开命名空间组件：
+
+| 组件 | 导入方式 | 说明 |
+|------|----------|------|
+| `Model` | `from easybot import Model` | 所有事件模型、数据模型和类型命名空间 |
+| `MessagesModel` | `from easybot import MessagesModel` | 消息构建器命名空间，包含 `Message`、`MessageEmbed`、`MessageMarkdown` 等 |
+
 ---
 
-## 八、TextChainBuilder — 文本交互构建器
-
-用于构建文本消息中的交互元素，如@用户、指令操作、跳转子频道等。
+## 八、Builders 构建器
 
 **模块**: `easybot.builders`  
 **导入**: `from easybot import Builders`
 
-### 8.1 快速示例
+Builders 提供三个公开构建器：
+
+| 构建器 | 说明 |
+|--------|------|
+| `Builders.ParagraphBuilder` | 构建论坛段落内容 |
+| `Builders.ThreadContentBuilder` | 构建论坛帖子内容 |
+| `Builders.TextChainBuilder` | 构建文本交互元素 |
+
+### 8.1 论坛内容构建器
+
+`ThreadContentBuilder` 用于构建整篇帖子内容，`ParagraphBuilder` 用于手动拼装单个段落：
+
+```python
+from easybot import Builders
+
+content = (
+    Builders.ThreadContentBuilder()
+    .add_text_paragraph("第一段文字", bold=True)
+    .add_image_paragraph("https://example.com/image.png")
+    .build()
+)
+```
+
+也可以单独构建段落后再组合：
+
+```python
+paragraph = (
+    Builders.ParagraphBuilder()
+    .add_text("正文内容", bold=True)
+    .add_image("https://example.com/image.png")
+    .build()
+)
+```
+
+### 8.2 TextChainBuilder — 文本交互构建器
+
+用于构建文本消息中的交互元素，如 @用户、指令操作、跳转子频道等。
+
+### 8.3 快速示例
 
 ```python
 from easybot import Bot, Builders, Model
@@ -565,7 +718,7 @@ async def handle(msg: Model.GuildMessage) -> None:
 bot.start()
 ```
 
-### 8.2 可用方法
+### 8.4 常用方法
 
 | 方法 | 说明 | 支持场景 |
 |------|------|---------|

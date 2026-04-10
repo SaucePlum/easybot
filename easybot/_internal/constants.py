@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ..api import API
+    from ..logger import Logger
 
-from ..models import Model
+from ..models import BaseModel, Model
 from .reply_strategy import create_reply_strategy
 
 RETRYABLE_CODES: set[int] = {
@@ -200,7 +201,8 @@ def convert_to_model(
     event_id: str | None = None,
     seq: int | None = None,
     opcode: int = 0,
-) -> Any:
+    logger: "Logger" = None,
+) -> BaseModel | None:
     """
     将原始事件数据转换为模型对象
 
@@ -211,6 +213,7 @@ def convert_to_model(
         event_id: 事件 ID（Payload.id）
         seq: 序列号（Payload.s）
         opcode: 操作码（Payload.op）
+        logger: Logger 实例（用于记录转换失败日志）
 
     Returns:
         转换后的模型对象，如果无法转换则返回 None
@@ -231,6 +234,9 @@ def convert_to_model(
                 )
                 model._reply_strategy = strategy
             return model
-        except Exception:
-            pass
+        except Exception as e:
+            if logger:
+                logger.warning(
+                    f"事件 {event_type} 模型转换失败: {type(e).__name__}: {e}"
+                )
     return None

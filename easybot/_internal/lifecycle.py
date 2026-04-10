@@ -11,12 +11,13 @@ EasyBot SDK 生命周期事件管理模块
 import asyncio
 import inspect
 import time
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 from ..models import ShutdownEvent, StartupEvent, TimerEvent
 
 if TYPE_CHECKING:
     from ..bot import Bot
+    from ..logger import Logger
 
 
 INTERNAL_EVENT_STARTUP = "INTERNAL_STARTUP"
@@ -31,7 +32,7 @@ class LifecycleManager:
     管理机器人的生命周期事件，包括启动、关闭和定时器事件。
     """
 
-    def __init__(self, bot: "Bot", logger: Any):
+    def __init__(self, bot: "Bot", logger: "Logger"):
         """
         初始化生命周期管理器
 
@@ -71,7 +72,9 @@ class LifecycleManager:
         ]
         return len(params) > 0
 
-    async def _call_handler(self, handler: Callable, event: Any) -> None:
+    async def _call_handler(
+        self, handler: Callable, event: StartupEvent | ShutdownEvent | TimerEvent
+    ) -> None:
         """
         调用处理器，根据签名决定是否传递事件参数
 

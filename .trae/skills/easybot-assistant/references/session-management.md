@@ -78,12 +78,23 @@ with bot.session.bind(msg) as s:
         key="game_state",
         data={"score": 0, "level": 1},
         timeout=3600,  # 1小时超时（默认 1800 秒/30 分钟）
-        timeout_reply="游戏会话已过期",  # 超时提示
+        timeout_reply="游戏会话已过期",  # 超时提示（支持多种消息类型）
         inactive_gc_timeout=300,  # 超时后5分钟清理
+        is_replace=True,  # 是否替换现有会话（默认 True）
+        send_reply_on_msg_id_expired=False,  # msg_id过期后是否仍发送
     )
 ```
 
-> **重要说明**：`timeout` 参数有默认值 **1800 秒（30 分钟）**。即使不显式设置，会话也会在 30 分钟无操作后自动超时，防止永久占用内存和存储。
+> **重要说明**：
+> 1. `timeout` 参数有默认值 **1800 秒（30 分钟）**。即使不显式设置，会话也会在 30 分钟无操作后自动超时，防止永久占用内存和存储。
+> 2. `is_replace` 参数控制是否替换现有会话：
+>    - `True`（默认）：如果会话已存在，直接替换
+>    - `False`：如果会话已存在，抛出 `KeyError` 异常
+> 3. `timeout_reply` 支持多种消息类型：
+>    - 字符串：`"游戏会话已过期"`
+>    - Embed 消息：`MessagesModel.MessageEmbed(title="超时", content=["会话已过期"])`
+>    - Markdown 消息：`MessagesModel.MessageMarkdown(content="# 超时提示")`
+>    - Ark 消息：`MessagesModel.MessageArk23/24/37(...)`
 
 ### 获取会话
 
@@ -140,18 +151,23 @@ with bot.session.bind(msg) as s:
 ```python
 async def wait_for(
     self,
-    scopes: Union[str, Sequence[str]],
-    command: Union[str, Sequence[str], Pattern[str], None] = None,
-    timeout: Optional[int] = None,
-    predicate: Optional[Callable[[Any], bool]] = None,
-    on_timeout: Optional[Callable[[], Any]] = None,
-) -> Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]:
+    scopes: str | Sequence[str],
+    command: BotCommandObject | str | Sequence[str] | Pattern[str] | None = None,
+    timeout: int | None = None,
+    predicate: Callable[[Any], bool] | None = None,
+    on_timeout: Callable[[], None] | None = None,
+) -> GuildMessage | GroupMessage | C2CMessage | DirectMessage:
     """
     等待用户发送匹配的消息
 
     Args:
         scopes: 作用域，可以是单个作用域或作用域列表
-        command: 命令匹配，支持字符串、字符串列表、正则表达式或 None（接受任意输入）
+        command: 命令匹配，支持多种类型：
+            - BotCommandObject: 直接传入命令对象，可使用全部参数
+            - str: 精确匹配消息内容
+            - list/tuple: 匹配列表中的任意一个
+            - Pattern: 正则表达式匹配
+            - None: 接受任意输入
         timeout: 超时时间（秒）
         predicate: 自定义过滤函数
         on_timeout: 超时回调函数
@@ -169,7 +185,10 @@ async def wait_for(
     """
 ```
 
-**重要提示：** 这是一个异步方法，必须使用 `await` 调用。
+**重要提示：**
+1. 这是一个异步方法，必须使用 `await` 调用
+2. 使用轮询机制检查消息，轮询间隔为 **0.5 秒**
+3. 当使用快捷方式（`str`/`list`/`Pattern`）时，会自动包装为 `BotCommandObject(valid_scenes=CommandValidScenes.ALL)`
 
 ### 基本用法
 
@@ -231,7 +250,26 @@ result = await s.wait_for(
     scopes=Scope.USER,
     timeout=30
 )
+
+# 高级用法：使用 BotCommandObject
+from easybot import BotCommandObject
+cmd = BotCommandObject(
+    command="确认",
+    admin=True,  # 仅管理员可触发
+    admin_error_msg="需要管理员权限",
+    at=True,  # 需要@机器人
+)
+result = await s.wait_for(
+    scopes=Scope.USER,
+    command=cmd,
+    timeout=60
+)
 ```
+
+> **重要说明**：
+> - 当使用快捷方式（`str`/`list`/`Pattern`）传入 `command` 时，内部会自动包装为 `BotCommandObject(valid_scenes=CommandValidScenes.ALL)`
+> - 如需使用高级参数（如权限校验、@要求等），请直接构造并传入 `BotCommandObject` 实例
+> - `wait_for` 使用 `asyncio.Future` 实现即时唤醒，消息到达时直接通知等待者，无轮询延迟
 
 ### 自定义过滤
 
@@ -290,14 +328,38 @@ bot = Bot(
 )
 ```
 
+### 自定义持久化配置
+
+```python
+from easybot import Bot
+
+bot = Bot(
+    app_id="...",
+    app_secret="...",
+    # 自定义会话管理器配置（高级用法）
+)
+
+# 通过 bot.session 访问会话管理器
+# 注意：以下参数需要在 Bot 初始化时通过其他方式配置
+# commit_path: 会话数据持久化路径，默认为当前目录下的 sdk_data
+# is_auto_commit: 是否自动持久化，默认为 True
+```
+
+> **说明**：
+> - `commit_path`：会话数据保存路径，默认为 `./sdk_data/sessions.pickle`
+> - `is_auto_commit`：
+>   - `True`（默认）：每次会话操作后自动保存，数据安全但性能略低
+>   - `False`：需要手动调用 `commit_data()`，适合高频操作场景
+
 ### 手动持久化
 
 ```python
 # 手动保存（异步方法）
 await bot.session.commit_data()
 
-# 批量操作时关闭自动保存
-# （需要在 SessionManager 初始化时设置 is_auto_commit=False）
+# 批量操作时关闭自动保存（需要在初始化时设置 is_auto_commit=False）
+# 然后手动保存
+await bot.session.commit_data(is_info=False)  # is_info=False 不记录日志
 ```
 
 ### 恢复会话
@@ -467,6 +529,81 @@ async def guess_number(
                 break
 ```
 
+### 取消等待任务
+
+使用 `clear_wait_for()` 方法强制取消等待任务：
+
+```python
+from easybot import Model, Scope
+
+@bot.on_command(command="取消", valid_scenes=CommandValidScenes.ALL)
+async def cancel_wait(
+    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+) -> None:
+    with bot.session.bind(msg) as s:
+        # 取消特定用户的所有等待任务
+        bot.session.clear_wait_for(scope=Scope.USER, identify=msg.author.id)
+        await msg.reply("已取消所有等待任务")
+        
+        # 取消所有等待任务
+        bot.session.clear_wait_for()
+```
+
+> **说明**：
+> - 清除等待任务后，对应的 `wait_for()` 会抛出 `WaitError` 异常
+> - 适用于用户主动取消操作、强制中断等待等场景
+
+---
+
+## 会话超时与垃圾回收机制
+
+### 超时机制详解
+
+会话超时采用**两阶段清理**机制：
+
+1. **超时阶段**：会话变为 `INACTIVE` 状态
+   - 如果设置了 `timeout_reply`，会发送超时提示消息
+   - 会话数据仍然保留，用户有机会"恢复"
+
+2. **GC 清理阶段**：真正删除会话数据
+   - 根据 `inactive_gc_timeout` 参数延迟清理
+   - 默认立即清理（`inactive_gc_timeout=0`）
+
+### 时间线示例
+
+```python
+# 创建会话，设置超时和延迟清理
+await s.new(
+    scope=Scope.USER,
+    key="payment",
+    data={"order_id": "12345"},
+    timeout=300,  # 5分钟无操作后超时
+    timeout_reply="支付超时，订单已取消",
+    inactive_gc_timeout=600,  # 超时后10分钟才真正删除
+)
+
+# 时间线：
+# T=0: 创建会话
+# T=300: 会话超时，变为 INACTIVE，发送超时提示
+# T=900: GC 清理会话数据（超时后600秒）
+```
+
+### 启动时清理
+
+程序重启时会自动清理已过期的会话：
+
+```python
+# 程序停机期间可能已有会话超时
+# 启动时会检查并清理这些会话
+# 避免用户 get() 到本该过期的会话
+```
+
+### GC 清理周期
+
+- **检查频率**：每 5 秒检查一次会话超时状态
+- **清理频率**：每 30 秒执行一次垃圾回收
+- **性能优化**：使用 `yield_threshold` 机制，每处理 100 个会话让出事件循环
+
 ---
 
 ## SessionObject 属性
@@ -476,7 +613,7 @@ class SessionObject:
     scope: str          # 作用域
     status: int         # 状态（ACTIVE/INACTIVE）
     key: Hashable       # 会话键
-    data: Dict          # 会话数据
+    data: dict          # 会话数据
     identify: Hashable  # 标识符
 ```
 

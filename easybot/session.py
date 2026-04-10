@@ -12,20 +12,11 @@ from asyncio import AbstractEventLoop, sleep
 from collections import namedtuple
 from collections.abc import Sequence as ABCSequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import wraps
 from re import Pattern
 from time import time
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Hashable,
-    List,
-    Optional,
-    Sequence,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, Callable, Hashable, Sequence
 
 from .builders import MessagesModel
 from .exceptions import WaitError, WaitTimeoutError
@@ -122,23 +113,24 @@ class _SessionObject:
     def __init__(
         self,
         status: SessionStatus,
-        data: Dict,
-        timeout: Optional[float] = None,
+        data: dict,
+        timeout: float | None = None,
         last_operate: float = 0,
-        timeout_reply: Union[
-            str,
-            MessagesModel.Message,
-            MessagesModel.MessageEmbed,
-            MessagesModel.MessageArk23,
-            MessagesModel.MessageArk24,
-            MessagesModel.MessageArk37,
-            MessagesModel.MessageMarkdown,
-        ] = None,
+        timeout_reply: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
         inactive_gc_timeout: float = 0,
-        gc_timeout_stamp: Optional[float] = None,
-        timeout_reply_api: Optional[str] = None,
-        timeout_reply_params: Optional[Dict[str, Any]] = None,
-        timeout_reply_message_id_expire: Optional[float] = None,
+        gc_timeout_stamp: float | None = None,
+        timeout_reply_api: str | None = None,
+        timeout_reply_params: dict[str, Any] | None = None,
+        timeout_reply_message_id_expire: float | None = None,
         send_reply_on_msg_id_expired: bool = False,
     ):
         self.status = status
@@ -178,30 +170,29 @@ class BoundSession:
             data = await s.get(Scope.USER, "key")
     """
 
-    def __init__(self, manager: "SessionManager", obj: Any):
+    def __init__(self, manager: "SessionManager", obj: Model.Message):
         self._manager: "SessionManager" = manager
-        self._obj: Any = obj
+        self._obj: Model.Message = obj
 
     async def new(
         self,
         scope: str,
         key: Hashable,
-        data: Optional[Dict] = None,
-        identify: Optional[Hashable] = None,
+        data: dict | None = None,
+        identify: Hashable | None = None,
         is_replace: bool = True,
-        timeout: Optional[float] = None,
-        timeout_reply: Optional[
-            Union[
-                str,
-                MessagesModel.Message,
-                MessagesModel.MessageEmbed,
-                MessagesModel.MessageArk23,
-                MessagesModel.MessageArk24,
-                MessagesModel.MessageArk37,
-                MessagesModel.MessageMarkdown,
-            ]
-        ] = None,
-        inactive_gc_timeout: Optional[float] = 0,
+        timeout: float | None = None,
+        timeout_reply: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
+        inactive_gc_timeout: float | None = 0,
         send_reply_on_msg_id_expired: bool = False,
     ) -> SessionObject:
         """
@@ -240,8 +231,8 @@ class BoundSession:
         self,
         scope: str,
         key: Hashable,
-        identify: Optional[Hashable] = None,
-        default: Any = None,
+        identify: Hashable | None = None,
+        default: SessionObject | None = None,
         skip_update_last_op: bool = False,
     ) -> SessionObject:
         """
@@ -267,8 +258,8 @@ class BoundSession:
         self,
         scope: str,
         key: Hashable,
-        data: Dict,
-        identify: Optional[Hashable] = None,
+        data: dict,
+        identify: Hashable | None = None,
     ) -> SessionObject:
         """
         更新会话数据
@@ -292,9 +283,9 @@ class BoundSession:
 
     async def remove(
         self,
-        scope: Optional[str] = None,
-        identify: Optional[Hashable] = None,
-        key: Optional[Hashable] = None,
+        scope: str | None = None,
+        identify: Hashable | None = None,
+        key: Hashable | None = None,
     ) -> None:
         """
         删除会话
@@ -314,12 +305,12 @@ class BoundSession:
 
     async def wait_for(
         self,
-        scopes: Union[str, Sequence[str]],
-        command: Union[str, Sequence[str], Pattern[str], None] = None,
-        timeout: Optional[int] = None,
-        predicate: Optional[Callable[[Any], bool]] = None,
-        on_timeout: Optional[Callable[[], Any]] = None,
-    ) -> Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]:
+        scopes: str | Sequence[str],
+        command: BotCommandObject | str | Sequence[str] | Pattern[str] | None = None,
+        timeout: int | None = None,
+        predicate: Callable[[Model.Message], bool] | None = None,
+        on_timeout: Callable[[], None] | None = None,
+    ) -> GuildMessage | GroupMessage | C2CMessage | DirectMessage:
         """
         等待用户发送匹配的消息
 
@@ -328,11 +319,13 @@ class BoundSession:
 
         Args:
             scopes: 等待的作用域，可以是单个或多个。只有来自匹配作用域的消息才会被处理
-            command: 期望的命令，支持多种类型：
-                - None: 接受任何消息
-                - str: 精确匹配消息内容
-                - list/tuple: 匹配列表中的任意一个
-                - 正则表达式: 正则匹配
+            command: 命令匹配规则，支持多种类型：
+                - ``BotCommandObject``: 直接传入命令对象，可使用全部参数
+                  （如 at、admin、treat、is_require_bot_admin 等）
+                - ``None``: 接受任何消息
+                - ``str``: 精确匹配消息内容
+                - ``list/tuple``: 匹配列表中的任意一个
+                - 正则表达式（Pattern）: 正则匹配
             timeout: 超时时间（秒），None 表示无限等待
             predicate: 自定义过滤函数，接收消息对象返回布尔值
             on_timeout: 超时时的回调函数
@@ -354,6 +347,10 @@ class BoundSession:
 
             # 使用正则匹配数字
             reply = await session.wait_for(Scope.USER, re.compile(r'\\d+'), timeout=30)
+
+            # 高级用法：传入 BotCommandObject，使用完整参数
+            cmd = BotCommandObject(command="确认", admin=True)
+            reply = await session.wait_for(Scope.USER, cmd, timeout=60)
         """
         return await self._manager.wait_for(
             scopes, command, timeout, predicate, on_timeout
@@ -370,19 +367,17 @@ class SessionManager:
     3. 支持 wait_for 机制实现多轮对话
     4. 持久化会话数据到文件
 
-    线程安全说明：
-    - 本类不是线程安全的，应在单个异步事件循环中使用
-    - 所有会话操作都是内存操作，性能开销很小
-
-    使用模式：
-    1. 通过 bind() 绑定消息对象后使用
-    2. 通过 with_session 装饰器自动绑定
+    并发安全说明：
+    - 使用 asyncio.Lock 保护 _sessions 字典，在 asyncio 单线程模型下安全
+    - commit_data() 在锁内完成 pickle 序列化快照，确保数据一致性
+    - 所有会话操作（new/get/update/remove）均受锁保护
+    - GC 和超时检查的迭代过程受锁保护，避免字典遍历期间被修改
     """
 
     def __init__(
         self,
         bot: "Bot",
-        commit_path: Optional[str] = None,
+        commit_path: str | None = None,
         is_auto_commit: bool = True,
     ):
         """
@@ -395,18 +390,22 @@ class SessionManager:
                 - True: 每次操作后自动保存，数据安全但性能略低
                 - False: 需要手动调用 commit_data()，适合高频操作场景
         """
-        self.__sessions: Dict = {x: {} for x in _AllScopeStr}
-        self.__wait_for_registers: Dict = {}
-        self.__logger = bot.logger.with_module("session")
-        self.__commit_path: str = commit_path or os.path.join(os.getcwd(), "sdk_data")
-        self.__check_path(self.__commit_path)
-        self.__is_auto_commit = is_auto_commit
-        self.__is_running = False
-        self.__data_loaded = False
+        self._sessions: dict = {x: {} for x in _AllScopeStr}
+        self._sessions_lock = asyncio.Lock()
+        self._wait_for_registers: dict = {}
+        self._logger = bot.logger.with_module("session")
+        self._commit_path: str = commit_path or os.path.join(os.getcwd(), "sdk_data")
+        self._check_path(self._commit_path)
+        self._is_auto_commit = is_auto_commit
+        self._is_running = False
+        self._data_loaded = False
+        self._stop_event = asyncio.Event()
+        self._manager_task: asyncio.Task | None = None
+        self._fetch_task: asyncio.Task | None = None
         self.api = None
-        self._current_obj = None
+        self._current_obj_var: ContextVar = ContextVar("_current_obj", default=None)
 
-    def __check_path(self, path: str):
+    def _check_path(self, path: str):
         """检查路径是否存在，不存在则创建"""
         if not os.path.exists(path):
             os.makedirs(path)
@@ -421,7 +420,7 @@ class SessionManager:
         加载完成后会自动清理已过期的会话。
         """
         try:
-            data_path = os.path.join(self.__commit_path, "sessions.pickle")
+            data_path = os.path.join(self._commit_path, "sessions.pickle")
 
             def _sync_read():
                 if os.path.exists(data_path):
@@ -431,11 +430,12 @@ class SessionManager:
 
             data = await asyncio.to_thread(_sync_read)
             if data is not None:
-                self.__sessions = data
-                self.__logger.debug("加载session会话数据成功")
+                async with self._sessions_lock:
+                    self._sessions = data
+                self._logger.debug("加载session会话数据成功")
                 await self._cleanup_expired_sessions_on_startup()
         except Exception as e:
-            self.__logger.error(f"加载session会话数据失败: {e}")
+            self._logger.error(f"加载session会话数据失败: {e}")
 
     async def _cleanup_expired_sessions_on_startup(self):
         """
@@ -447,32 +447,33 @@ class SessionManager:
         current_time = time()
         cleaned_count = 0
 
-        for scope, scope_sessions in self.__sessions.items():
-            if scope == Scope.GLOBAL:
-                keys_to_delete = []
-                for key, session in scope_sessions.items():
-                    if self._is_session_expired(session, current_time):
-                        keys_to_delete.append(key)
-                for key in keys_to_delete:
-                    del scope_sessions[key]
-                    cleaned_count += 1
-            else:
-                identify_to_delete = []
-                for identify, identify_sessions in scope_sessions.items():
+        async with self._sessions_lock:
+            for scope, scope_sessions in self._sessions.items():
+                if scope == Scope.GLOBAL:
                     keys_to_delete = []
-                    for key, session in identify_sessions.items():
+                    for key, session in scope_sessions.items():
                         if self._is_session_expired(session, current_time):
                             keys_to_delete.append(key)
                     for key in keys_to_delete:
-                        del identify_sessions[key]
+                        del scope_sessions[key]
                         cleaned_count += 1
-                    if not identify_sessions:
-                        identify_to_delete.append(identify)
-                for identify in identify_to_delete:
-                    del scope_sessions[identify]
+                else:
+                    identify_to_delete = []
+                    for identify, identify_sessions in list(scope_sessions.items()):
+                        keys_to_delete = []
+                        for key, session in list(identify_sessions.items()):
+                            if self._is_session_expired(session, current_time):
+                                keys_to_delete.append(key)
+                        for key in keys_to_delete:
+                            del identify_sessions[key]
+                            cleaned_count += 1
+                        if not identify_sessions:
+                            identify_to_delete.append(identify)
+                    for identify in identify_to_delete:
+                        del scope_sessions[identify]
 
         if cleaned_count > 0:
-            self.__logger.info(f"启动时清理了 {cleaned_count} 个过期会话")
+            self._logger.info(f"启动时清理了 {cleaned_count} 个过期会话")
             await self.commit_data(is_info=False)
 
     def _is_session_expired(self, session: _SessionObject, current_time: float) -> bool:
@@ -513,25 +514,29 @@ class SessionManager:
         持久化会话数据到文件（异步）
 
         将当前所有会话数据序列化保存到 sessions.pickle 文件。
-        使用 asyncio.to_thread() 将同步 I/O 操作卸载到线程池，避免阻塞事件循环。
+        在锁内同步完成 pickle 序列化，确保快照一致性，
+        再将 I/O 操作卸载到线程池，避免阻塞事件循环。
 
         Args:
             is_info: 是否记录日志，批量操作时可设为 False 减少日志量
         """
         try:
-            data_path = os.path.join(self.__commit_path, "sessions.pickle")
+            data_path = os.path.join(self._commit_path, "sessions.pickle")
+
+            async with self._sessions_lock:
+                raw = pickle.dumps(self._sessions)
 
             def _sync_write():
                 with open(data_path, "wb") as f:
-                    pickle.dump(self.__sessions, f)
+                    f.write(raw)
 
             await asyncio.to_thread(_sync_write)
             if is_info:
-                self.__logger.debug("持久化session会话数据成功")
+                self._logger.debug("持久化session会话数据成功")
         except Exception as e:
-            self.__logger.error(f"持久化session会话数据失败: {e}")
+            self._logger.error(f"持久化session会话数据失败: {e}")
 
-    def __check_identify(self, scope: str, obj) -> Hashable:
+    def _check_identify(self, scope: str, obj) -> Hashable:
         """
         从消息对象中提取指定作用域的标识符
 
@@ -575,19 +580,19 @@ class SessionManager:
 
         return None
 
-    def __valid_scope(self, scope: str) -> str:
+    def _valid_scope(self, scope: str) -> str:
         """验证作用域是否有效，无效时抛出 ValueError"""
         if scope not in _AllScopeStr:
             raise ValueError(f"无效的作用域: {scope}")
         return scope
 
-    def __check_scope(self, scope: str) -> Dict:
+    def _check_scope(self, scope: str) -> dict:
         """获取指定作用域的会话字典，如果不存在则创建空字典"""
-        if scope not in self.__sessions:
-            self.__sessions[scope] = {}
-        return self.__sessions[scope]
+        if scope not in self._sessions:
+            self._sessions[scope] = {}
+        return self._sessions[scope]
 
-    async def __update_last_op(self, session: _SessionObject):
+    async def _update_last_op(self, session: _SessionObject):
         """
         更新会话的最后操作时间
 
@@ -595,10 +600,10 @@ class SessionManager:
         以确保超时计时器能正确重置。
         """
         session.last_operate = time()
-        if self.__is_auto_commit:
+        if self._is_auto_commit:
             await self.commit_data(is_info=False)
 
-    def __get_reply_params(self, obj) -> Dict:
+    def _get_reply_params(self, obj) -> dict:
         """
         从消息对象中提取超时回复所需的参数
 
@@ -635,7 +640,7 @@ class SessionManager:
                 timeout_reply_params["openid"] = obj.author.id
                 timeout_reply_api = "send_c2c_message"
         except Exception as e:
-            self.__logger.error(f"获取回复参数时出现错误：{e}")
+            self._logger.error(f"获取回复参数时出现错误：{e}")
 
         return {
             "timeout_reply_api": timeout_reply_api,
@@ -647,34 +652,26 @@ class SessionManager:
         """设置 API 实例，用于发送超时回复"""
         self.api = api
 
-    async def __check_session_timeouts(self):
+    async def _check_session_timeouts(self):
         """
         检查所有会话的超时状态
 
         遍历所有作用域的所有会话，检查是否超时。
-        使用 yield_threshold 机制定期让出事件循环，
-        避免在会话数量很大时阻塞其他协程。
+        使用锁保护迭代过程，防止其他协程在遍历期间修改字典。
         """
         current_time = time()
-        processed_count = 0
-        yield_threshold = 100
 
-        for scope, scope_sessions in self.__sessions.items():
-            if scope == Scope.GLOBAL:
-                for key, session in scope_sessions.items():
-                    self.__handle_session_timeout(session)
-                    processed_count += 1
-                    if processed_count % yield_threshold == 0:
-                        await sleep(0)
-            else:
-                for identify, identify_sessions in scope_sessions.items():
-                    for key, session in identify_sessions.items():
-                        self.__handle_session_timeout(session)
-                        processed_count += 1
-                        if processed_count % yield_threshold == 0:
-                            await sleep(0)
+        async with self._sessions_lock:
+            for scope, scope_sessions in self._sessions.items():
+                if scope == Scope.GLOBAL:
+                    for key, session in scope_sessions.items():
+                        self._handle_session_timeout(session)
+                else:
+                    for identify, identify_sessions in scope_sessions.items():
+                        for key, session in identify_sessions.items():
+                            self._handle_session_timeout(session)
 
-    def __handle_session_timeout(self, session: _SessionObject):
+    def _handle_session_timeout(self, session: _SessionObject):
         """
         处理单个会话的超时逻辑
 
@@ -701,11 +698,11 @@ class SessionManager:
                             if session.send_reply_on_msg_id_expired:
                                 if "msg_id" in session.timeout_reply_params:
                                     del session.timeout_reply_params["msg_id"]
-                                    self.__logger.warning(
+                                    self._logger.warning(
                                         "msg_id 已过期（超过5分钟），超时回复将以主动消息形式发送（消耗主动消息配额）"
                                     )
                             else:
-                                self.__logger.warning(
+                                self._logger.warning(
                                     "msg_id 已过期（超过5分钟），且 send_reply_on_msg_id_expired=False，"
                                     "跳过发送超时回复以避免消耗主动消息配额"
                                 )
@@ -722,11 +719,10 @@ class SessionManager:
 
                         api_method = getattr(self.api, session.timeout_reply_api, None)
                         if api_method:
-                            import asyncio
-
-                            asyncio.create_task(api_method(**params))
+                            task = asyncio.create_task(api_method(**params))
+                            task.add_done_callback(self._on_timeout_reply_done)
                     except Exception as e:
-                        self.__logger.error(f"发送超时回复时出现错误：{e}")
+                        self._logger.error(f"发送超时回复时出现错误：{e}")
 
                 if session.inactive_gc_timeout > 0:
                     session.status = SessionStatus.INACTIVE
@@ -743,14 +739,53 @@ class SessionManager:
         该循环负责定期检查超时和执行垃圾回收。
         同时在启动时异步加载持久化的会话数据。
         """
-        if not self.__is_running:
-            loop.create_task(self.__manager_loop(loop))
-            if not self.__data_loaded:
-                loop.create_task(self.fetch_data())
-                self.__data_loaded = True
-            self.__is_running = True
+        if not self._is_running:
+            self._stop_event.clear()
+            self._manager_task = loop.create_task(self._manager_loop())
+            if not self._data_loaded:
+                self._fetch_task = loop.create_task(self.fetch_data())
+                self._data_loaded = True
+            self._is_running = True
 
-    async def __manager_loop(self, loop: AbstractEventLoop):
+    async def stop(self) -> None:
+        """
+        停止会话管理器的后台任务
+
+        在 Bot 停止时调用，取消会话管理循环和数据加载任务。
+        停止前会自动持久化会话数据，确保数据不丢失。
+        """
+        if not self._is_running:
+            return
+
+        self._stop_event.set()
+
+        if self._is_auto_commit:
+            try:
+                await self.commit_data(is_info=False)
+            except Exception as e:
+                self._logger.error(f"停止前持久化会话数据失败: {e}")
+
+        for task in (self._manager_task, self._fetch_task):
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        self._manager_task = None
+        self._fetch_task = None
+        self._is_running = False
+        self._logger.debug("会话管理器已停止")
+
+    def _on_timeout_reply_done(self, task: asyncio.Task) -> None:
+        """超时回复任务完成回调，捕获并记录异步执行中的异常"""
+        if task.cancelled():
+            return
+        if exc := task.exception():
+            self._logger.error(f"发送超时回复时出现异步错误：{exc}")
+
+    async def _manager_loop(self):
         """
         会话管理主循环
 
@@ -758,18 +793,23 @@ class SessionManager:
         1. 每 5 秒检查一次会话超时
         2. 每 30 秒执行一次垃圾回收
 
-        这个循环会一直运行，直到程序退出。
+        当 _stop_event 被设置时退出循环。
         """
         gc_counter = 0
-        while True:
-            await sleep(5)
-            await self.__check_session_timeouts()
+        while not self._stop_event.is_set():
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=5.0)
+                break
+            except asyncio.TimeoutError:
+                pass
+
+            await self._check_session_timeouts()
             gc_counter += 1
             if gc_counter >= 6:
-                await self.__gc_sessions()
+                await self._gc_sessions()
                 gc_counter = 0
 
-    async def __gc_sessions(self):
+    async def _gc_sessions(self):
         """
         垃圾回收：清理已过期的 INACTIVE 会话
 
@@ -777,56 +817,49 @@ class SessionManager:
         1. 状态为 INACTIVE
         2. gc_timeout_stamp 已过期
 
-        使用 yield_threshold 机制避免阻塞事件循环。
+        使用锁保护迭代过程，防止其他协程在遍历期间修改字典。
         清理完成后如果 is_auto_commit=True 会自动持久化。
         """
         current_time = time()
-        processed_count = 0
         deleted_count = 0
-        yield_threshold = 100
 
-        for scope, scope_sessions in self.__sessions.items():
-            if scope == Scope.GLOBAL:
-                keys_to_delete = []
-                for key, session in scope_sessions.items():
-                    if session.status == SessionStatus.INACTIVE:
-                        if (
-                            session.gc_timeout_stamp
-                            and current_time > session.gc_timeout_stamp
-                        ):
-                            keys_to_delete.append(key)
-                    processed_count += 1
-                    if processed_count % yield_threshold == 0:
-                        await sleep(0)
-                for key in keys_to_delete:
-                    del scope_sessions[key]
-                    deleted_count += 1
-            else:
-                identify_to_delete = []
-                for identify, identify_sessions in scope_sessions.items():
+        async with self._sessions_lock:
+            for scope, scope_sessions in self._sessions.items():
+                if scope == Scope.GLOBAL:
                     keys_to_delete = []
-                    for key, session in identify_sessions.items():
+                    for key, session in scope_sessions.items():
                         if session.status == SessionStatus.INACTIVE:
                             if (
                                 session.gc_timeout_stamp
                                 and current_time > session.gc_timeout_stamp
                             ):
                                 keys_to_delete.append(key)
-                        processed_count += 1
-                        if processed_count % yield_threshold == 0:
-                            await sleep(0)
                     for key in keys_to_delete:
-                        del identify_sessions[key]
+                        del scope_sessions[key]
                         deleted_count += 1
-                    if not identify_sessions:
-                        identify_to_delete.append(identify)
-                for identify in identify_to_delete:
-                    del scope_sessions[identify]
+                else:
+                    identify_to_delete = []
+                    for identify, identify_sessions in scope_sessions.items():
+                        keys_to_delete = []
+                        for key, session in identify_sessions.items():
+                            if session.status == SessionStatus.INACTIVE:
+                                if (
+                                    session.gc_timeout_stamp
+                                    and current_time > session.gc_timeout_stamp
+                                ):
+                                    keys_to_delete.append(key)
+                        for key in keys_to_delete:
+                            del identify_sessions[key]
+                            deleted_count += 1
+                        if not identify_sessions:
+                            identify_to_delete.append(identify)
+                    for identify in identify_to_delete:
+                        del scope_sessions[identify]
 
         if deleted_count > 0:
-            self.__logger.debug(f"GC清理完成：删除了 {deleted_count} 个过期会话")
+            self._logger.debug(f"GC清理完成：删除了 {deleted_count} 个过期会话")
 
-        if self.__is_auto_commit:
+        if self._is_auto_commit:
             await self.commit_data(is_info=False)
 
     # -*- 会话管理方法（内部实现） -*-
@@ -836,22 +869,21 @@ class SessionManager:
         obj,
         scope: str,
         key: Hashable,
-        data: Dict | None = None,
+        data: dict | None = None,
         identify: Hashable | None = None,
         is_replace: bool = True,
-        timeout: Optional[float] = None,
-        timeout_reply: Optional[
-            Union[
-                str,
-                MessagesModel.Message,
-                MessagesModel.MessageEmbed,
-                MessagesModel.MessageArk23,
-                MessagesModel.MessageArk24,
-                MessagesModel.MessageArk37,
-                MessagesModel.MessageMarkdown,
-            ]
-        ] = None,
-        inactive_gc_timeout: Optional[float] = 0,
+        timeout: float | None = None,
+        timeout_reply: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
+        inactive_gc_timeout: float | None = 0,
         send_reply_on_msg_id_expired: bool = False,
     ) -> SessionObject:
         """
@@ -873,42 +905,46 @@ class SessionManager:
             SessionObject: 会话对象
         """
         if not identify:
-            identify = self.__check_identify(scope, obj)
-        scope = self.__valid_scope(scope)
-        target_sessions = self.__check_scope(scope)
+            identify = self._check_identify(scope, obj)
+        scope = self._valid_scope(scope)
 
-        if identify:
-            if identify not in target_sessions:
-                target_sessions[identify] = {}
-            target_sessions = target_sessions[identify]
+        async with self._sessions_lock:
+            target_sessions = self._check_scope(scope)
 
-        if key in target_sessions and not is_replace:
             if identify:
-                raise KeyError(f"Scope {scope} 中已存在 {identify}::{key} 的session")
-            else:
-                raise KeyError(f"Scope {scope} 中已存在 {key} 的session")
+                if identify not in target_sessions:
+                    target_sessions[identify] = {}
+                target_sessions = target_sessions[identify]
 
-        reply_params = self.__get_reply_params(obj)
+            if key in target_sessions and not is_replace:
+                if identify:
+                    raise KeyError(
+                        f"Scope {scope} 中已存在 {identify}::{key} 的session"
+                    )
+                else:
+                    raise KeyError(f"Scope {scope} 中已存在 {key} 的session")
 
-        actual_timeout = (
-            timeout if timeout is not None else _SessionObject.DEFAULT_TIMEOUT
-        )
+            reply_params = self._get_reply_params(obj)
 
-        target_sessions[key] = _SessionObject(
-            status=SessionStatus.ACTIVE,
-            data=data if data is not None else {},
-            timeout=actual_timeout,
-            last_operate=time(),
-            timeout_reply=timeout_reply,
-            inactive_gc_timeout=inactive_gc_timeout,
-            gc_timeout_stamp=(
-                time() + inactive_gc_timeout if inactive_gc_timeout > 0 else None
-            ),
-            send_reply_on_msg_id_expired=send_reply_on_msg_id_expired,
-            **reply_params,
-        )
+            actual_timeout = (
+                timeout if timeout is not None else _SessionObject.DEFAULT_TIMEOUT
+            )
 
-        if self.__is_auto_commit:
+            target_sessions[key] = _SessionObject(
+                status=SessionStatus.ACTIVE,
+                data=data if data is not None else {},
+                timeout=actual_timeout,
+                last_operate=time(),
+                timeout_reply=timeout_reply,
+                inactive_gc_timeout=inactive_gc_timeout,
+                gc_timeout_stamp=(
+                    time() + inactive_gc_timeout if inactive_gc_timeout > 0 else None
+                ),
+                send_reply_on_msg_id_expired=send_reply_on_msg_id_expired,
+                **reply_params,
+            )
+
+        if self._is_auto_commit:
             await self.commit_data(is_info=False)
 
         return SessionObject(scope, SessionStatus.ACTIVE, key, data, identify)
@@ -937,24 +973,35 @@ class SessionManager:
             SessionObject: 会话对象或默认值
         """
         if not identify:
-            identify = self.__check_identify(scope, obj)
-        scope = self.__valid_scope(scope)
-        target_sessions = self.__check_scope(scope)
+            identify = self._check_identify(scope, obj)
+        scope = self._valid_scope(scope)
 
-        if identify:
-            if identify not in target_sessions or key not in target_sessions[identify]:
+        async with self._sessions_lock:
+            target_sessions = self._check_scope(scope)
+
+            if identify:
+                if (
+                    identify not in target_sessions
+                    or key not in target_sessions[identify]
+                ):
+                    return default
+                target_session = target_sessions[identify][key]
+            else:
+                if key not in target_sessions:
+                    return default
+                target_session = target_sessions[key]
+
+            if target_session.status == SessionStatus.INACTIVE:
                 return default
-            target_session = target_sessions[identify][key]
-        else:
-            if key not in target_sessions:
-                return default
-            target_session = target_sessions[key]
 
-        if target_session.status == SessionStatus.INACTIVE:
-            return default
+            if not skip_update_last_op:
+                target_session.last_operate = time()
+                need_commit = self._is_auto_commit
+            else:
+                need_commit = False
 
-        if not skip_update_last_op:
-            await self.__update_last_op(target_session)
+        if need_commit:
+            await self.commit_data(is_info=False)
 
         return SessionObject(
             scope, target_session.status, key, target_session.data, identify
@@ -965,7 +1012,7 @@ class SessionManager:
         obj,
         scope: str,
         key: Hashable,
-        data: Dict,
+        data: dict,
         identify: Hashable = None,
     ) -> SessionObject:
         """
@@ -982,28 +1029,39 @@ class SessionManager:
             SessionObject: 会话对象
         """
         if not identify:
-            identify = self.__check_identify(scope, obj)
-        scope = self.__valid_scope(scope)
-        target_sessions = self.__check_scope(scope)
+            identify = self._check_identify(scope, obj)
+        scope = self._valid_scope(scope)
 
-        if identify:
-            if identify not in target_sessions or key not in target_sessions[identify]:
-                raise KeyError(f"Scope {scope} 中不存在 {identify}::{key} 的session")
-            target_sessions = target_sessions[identify]
-        else:
-            if key not in target_sessions:
-                raise KeyError(f"Scope {scope} 中不存在 {key} 的session")
+        async with self._sessions_lock:
+            target_sessions = self._check_scope(scope)
 
-        target_session = target_sessions[key]
-        target_session.data.update(data)
-        await self.__update_last_op(target_session)
+            if identify:
+                if (
+                    identify not in target_sessions
+                    or key not in target_sessions[identify]
+                ):
+                    raise KeyError(
+                        f"Scope {scope} 中不存在 {identify}::{key} 的session"
+                    )
+                target_sessions = target_sessions[identify]
+            else:
+                if key not in target_sessions:
+                    raise KeyError(f"Scope {scope} 中不存在 {key} 的session")
+
+            target_session = target_sessions[key]
+            target_session.data.update(data)
+            target_session.last_operate = time()
+            need_commit = self._is_auto_commit
+
+        if need_commit:
+            await self.commit_data(is_info=False)
 
         return SessionObject(
             scope, target_session.status, key, target_session.data, identify
         )
 
     def register_wait_for(
-        self, obj: Any, scopes: Union[str, Sequence[str]], command: Any
+        self, obj: Model.Message, scopes: str | Sequence[str], command: BotCommandObject
     ) -> ScopeRegisterKey:
         """
         注册一个 wait_for 等待任务
@@ -1023,19 +1081,21 @@ class SessionManager:
         _scope_value = {x: None for x in _AllScopeStr}
         if isinstance(scopes, ABCSequence) and not isinstance(scopes, str):
             for scope in scopes:
-                _scope_value[scope] = self.__check_identify(scope, obj)
+                _scope_value[scope] = self._check_identify(scope, obj)
         else:
-            _scope_value[scopes] = self.__check_identify(scopes, obj)
+            _scope_value[scopes] = self._check_identify(scopes, obj)
 
         scope_key = ScopeRegisterKey(**_scope_value)
-        if scope_key not in self.__wait_for_registers:
-            self.__wait_for_registers[scope_key] = {}
-        self.__wait_for_registers[scope_key][command] = None
+        if scope_key not in self._wait_for_registers:
+            self._wait_for_registers[scope_key] = {}
+        self._wait_for_registers[scope_key][
+            command
+        ] = asyncio.get_event_loop().create_future()
         return scope_key
 
     def check_wait_for(
-        self, scope_key: ScopeRegisterKey, command: Any
-    ) -> tuple[bool, Any]:
+        self, scope_key: ScopeRegisterKey, command: BotCommandObject
+    ) -> tuple[bool, Model.Message | None]:
         """
         检查 wait_for 任务是否有结果
 
@@ -1047,48 +1107,57 @@ class SessionManager:
             command: 注册的命令对象
 
         Returns:
-            Tuple[bool, Any]: (注册是否存在, 结果数据)
+            tuple[bool, Any]: (注册是否存在, 结果数据)
                 - (False, None): 注册已被删除
                 - (True, None): 注册存在但还没收到消息
                 - (True, data): 收到了消息，data 是消息对象
         """
         if (
-            scope_key not in self.__wait_for_registers
-            or command not in self.__wait_for_registers[scope_key]
+            scope_key not in self._wait_for_registers
+            or command not in self._wait_for_registers[scope_key]
         ):
             return False, None
-        data = self.__wait_for_registers[scope_key][command]
-        if data:
-            del self.__wait_for_registers[scope_key][command]
-            if not self.__wait_for_registers[scope_key]:
-                del self.__wait_for_registers[scope_key]
-        return True, data
+        future = self._wait_for_registers[scope_key][command]
+        if (
+            isinstance(future, asyncio.Future)
+            and future.done()
+            and not future.cancelled()
+        ):
+            data = future.result()
+            self.del_wait_for(scope_key, command)
+            return True, data
+        return True, None
 
-    def del_wait_for(self, scope_key: ScopeRegisterKey, command: Any) -> None:
+    def del_wait_for(
+        self, scope_key: ScopeRegisterKey, command: BotCommandObject
+    ) -> None:
         """
         删除 wait_for 注册
 
         用于取消等待或超时后清理。删除后对应的 wait_for 会抛出 WaitError。
+        同时取消关联的 Future 以释放资源。
 
         Args:
             scope_key: 注册时返回的作用域键
             command: 注册的命令对象
         """
-        if scope_key not in self.__wait_for_registers:
+        if scope_key not in self._wait_for_registers:
             return
-        if command in self.__wait_for_registers[scope_key]:
-            del self.__wait_for_registers[scope_key][command]
-        if not self.__wait_for_registers[scope_key]:
-            del self.__wait_for_registers[scope_key]
+        if command in self._wait_for_registers[scope_key]:
+            future = self._wait_for_registers[scope_key].pop(command)
+            if isinstance(future, asyncio.Future) and not future.done():
+                future.cancel()
+        if not self._wait_for_registers[scope_key]:
+            del self._wait_for_registers[scope_key]
 
     async def wait_for(
         self,
-        scopes: Union[str, Sequence[str]],
-        command: Union[str, Sequence[str], Pattern[str], None] = None,
-        timeout: Optional[int] = None,
-        predicate: Optional[Callable[[Any], bool]] = None,
-        on_timeout: Optional[Callable[[], Any]] = None,
-    ) -> Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]:
+        scopes: str | Sequence[str],
+        command: BotCommandObject | str | Sequence[str] | Pattern[str] | None = None,
+        timeout: int | None = None,
+        predicate: Callable[[Model.Message], bool] | None = None,
+        on_timeout: Callable[[], None] | None = None,
+    ) -> GuildMessage | GroupMessage | C2CMessage | DirectMessage:
         """
         等待指定的命令被触发
 
@@ -1098,13 +1167,33 @@ class SessionManager:
         Args:
             scopes: 作用域或作用域列表，只有来自匹配作用域的消息才会被处理
             command: 命令匹配规则，支持多种类型：
-                - None: 接受任何消息
-                - str: 精确匹配消息内容
-                - list/tuple: 匹配列表中的任意一个
-                - 正则表达式: 正则匹配
+                - ``BotCommandObject``: 直接传入命令对象，可使用全部参数
+                  （如 at、admin、treat、is_require_bot_admin 等）
+                - ``None``: 接受任何消息
+                - ``str``: 精确匹配消息内容（快捷方式）
+                - ``list/tuple``: 匹配列表中的任意一个（快捷方式）
+                - 正则表达式（Pattern）: 正则匹配（快捷方式）
+
+                使用快捷方式时，会自动创建一个默认配置的 ``BotCommandObject``。
+                如需使用高级参数（如权限校验、@要求等），请直接传入 ``BotCommandObject``。
+
+                使用示例::
+
+                    # 快捷方式：简单字符串匹配
+                    await session.wait_for("user", "确认")
+
+                    # 高级用法：传入 BotCommandObject，使用完整参数
+                    cmd = BotCommandObject(command="确认", admin=True, admin_error_msg="需要管理员权限")
+                    await session.wait_for("user", cmd)
+
+                    # 使用正则 + @机器人要求
+                    import re
+                    cmd = BotCommandObject(regex=re.compile(r"\\d+"), at=True)
+                    await session.wait_for("user", cmd)
+
             timeout: 超时时间（秒），None 表示无限等待
             predicate: 自定义过滤函数，接收消息对象返回布尔值，
-                可以实现更复杂的匹配逻辑
+                可以实现更复杂的匹配逻辑（通过设置 _predicate 属性）
             on_timeout: 超时回调函数，在抛出异常前调用
 
         Returns:
@@ -1118,9 +1207,15 @@ class SessionManager:
             ValueError: 未绑定消息对象
             WaitError: 等待任务被意外删除
             WaitTimeoutError: 等待超时
+
+        Note:
+            当使用快捷方式（str/list/Pattern）传入 command 时，
+            内部会自动包装为 ``BotCommandObject(valid_scenes=CommandValidScenes.ALL)``。
+            如果需要对命令进行更细粒度的控制（如限制触发场景、权限校验等），
+            请直接构造并传入 ``BotCommandObject`` 实例。
         """
 
-        if self._current_obj is None:
+        if self._current_obj_var.get() is None:
             raise ValueError("请先使用 with session.bind(obj) 绑定消息对象")
 
         if command is None:
@@ -1139,22 +1234,27 @@ class SessionManager:
         if predicate is not None:
             setattr(command_obj, "_predicate", predicate)
 
-        scope_key = self.register_wait_for(self._current_obj, scopes, command_obj)
-        _timeout_stamp = time() + timeout if timeout else None
+        scope_key = self.register_wait_for(
+            self._current_obj_var.get(), scopes, command_obj
+        )
+        future = self._wait_for_registers[scope_key][command_obj]
 
-        while True:
-            check, result = self.check_wait_for(scope_key, command_obj)
-            if not check:
-                self.del_wait_for(scope_key, command_obj)
-                raise WaitError("找不到对应的wait_for()等待任务")
-            if result is not None:
-                break
-            if _timeout_stamp and time() > _timeout_stamp:
-                self.del_wait_for(scope_key, command_obj)
-                if on_timeout is not None:
-                    on_timeout()
-                raise WaitTimeoutError(f"wait_for()等待超时： {command_obj}")
-            await sleep(0.5)
+        try:
+            if timeout is not None:
+                result = await asyncio.wait_for(future, timeout=timeout)
+            else:
+                result = await future
+        except asyncio.TimeoutError:
+            self.del_wait_for(scope_key, command_obj)
+            if on_timeout is not None:
+                on_timeout()
+            raise WaitTimeoutError(f"wait_for()等待超时： {command_obj}")
+        except asyncio.CancelledError:
+            self.del_wait_for(scope_key, command_obj)
+            raise WaitError("找不到对应的wait_for()等待任务")
+        finally:
+            self.del_wait_for(scope_key, command_obj)
+
         return result
 
     # -*- 公共 API（上下文管理器和装饰器支持） -*-
@@ -1166,6 +1266,9 @@ class SessionManager:
 
         这是使用 SessionManager 的推荐方式。绑定后，所有会话操作
         都会自动从绑定的消息对象中提取 identify，无需手动传入。
+
+        使用 ContextVar 实现协程隔离，多个并发协程同时调用 bind()
+        不会互相覆盖 _current_obj。
 
         注意：所有修改操作都是异步方法，需要在异步上下文中调用。
 
@@ -1180,33 +1283,31 @@ class SessionManager:
         Yields:
             BoundSession: 绑定了消息对象的会话操作器
         """
-        old_obj = self._current_obj
-        self._current_obj = obj
+        token = self._current_obj_var.set(obj)
         try:
             yield BoundSession(self, obj)
         finally:
-            self._current_obj = old_obj
+            self._current_obj_var.reset(token)
 
     async def new(
         self,
         scope: str,
         key: Hashable,
-        data: Dict | None = None,
+        data: dict | None = None,
         identify: Hashable = None,
         is_replace: bool = True,
-        timeout: Optional[float] = None,
-        timeout_reply: Optional[
-            Union[
-                str,
-                MessagesModel.Message,
-                MessagesModel.MessageEmbed,
-                MessagesModel.MessageArk23,
-                MessagesModel.MessageArk24,
-                MessagesModel.MessageArk37,
-                MessagesModel.MessageMarkdown,
-            ]
-        ] = None,
-        inactive_gc_timeout: Optional[float] = 0,
+        timeout: float | None = None,
+        timeout_reply: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
+        inactive_gc_timeout: float | None = 0,
         send_reply_on_msg_id_expired: bool = False,
     ) -> SessionObject:
         """
@@ -1226,10 +1327,10 @@ class SessionManager:
         Returns:
             SessionObject: 会话对象
         """
-        if self._current_obj is None:
+        if self._current_obj_var.get() is None:
             raise ValueError("请先使用 with session.bind(obj) 绑定消息对象")
         return await self._new(
-            self._current_obj,
+            self._current_obj_var.get(),
             scope,
             key,
             data,
@@ -1262,17 +1363,22 @@ class SessionManager:
         Returns:
             SessionObject: 会话对象或默认值
         """
-        if self._current_obj is None:
+        if self._current_obj_var.get() is None:
             return default
         return await self._get(
-            self._current_obj, scope, key, identify, default, skip_update_last_op
+            self._current_obj_var.get(),
+            scope,
+            key,
+            identify,
+            default,
+            skip_update_last_op,
         )
 
     async def update(
         self,
         scope: str,
         key: Hashable,
-        data: Dict,
+        data: dict,
         identify: Hashable = None,
     ) -> SessionObject:
         """
@@ -1287,9 +1393,11 @@ class SessionManager:
         Returns:
             SessionObject: 会话对象
         """
-        if self._current_obj is None:
+        if self._current_obj_var.get() is None:
             raise ValueError("请先使用 with session.bind(obj) 绑定消息对象")
-        return await self._update(self._current_obj, scope, key, data, identify)
+        return await self._update(
+            self._current_obj_var.get(), scope, key, data, identify
+        )
 
     async def remove(
         self,
@@ -1306,43 +1414,47 @@ class SessionManager:
             key: 会话键
         """
         if not scope:
-            self.__sessions = {x: {} for x in _AllScopeStr}
+            async with self._sessions_lock:
+                self._sessions = {x: {} for x in _AllScopeStr}
             return
 
-        if identify is None and self._current_obj is not None:
-            identify = self.__check_identify(scope, self._current_obj)
+        if identify is None and self._current_obj_var.get() is not None:
+            identify = self._check_identify(scope, self._current_obj_var.get())
 
-        scope = self.__valid_scope(scope)
-        target_sessions = self.__check_scope(scope)
+        scope = self._valid_scope(scope)
 
-        if not key and not identify:
-            target_sessions.clear()
-            if self.__is_auto_commit:
-                await self.commit_data(is_info=False)
-            return
+        async with self._sessions_lock:
+            target_sessions = self._check_scope(scope)
 
-        if not key and identify:
-            if identify in target_sessions:
-                target_sessions[identify] = {}
-                if self.__is_auto_commit:
-                    await self.commit_data(is_info=False)
-            return
+            if not key and not identify:
+                target_sessions.clear()
+                need_commit = self._is_auto_commit
+            elif not key and identify:
+                if identify in target_sessions:
+                    target_sessions[identify] = {}
+                need_commit = self._is_auto_commit
+            elif identify:
+                if (
+                    identify not in target_sessions
+                    or key not in target_sessions[identify]
+                ):
+                    raise KeyError(
+                        f"Scope {scope} 中不存在 {identify}::{key} 的session"
+                    )
+                target_sessions[identify].pop(key)
+                need_commit = self._is_auto_commit
+            else:
+                if key not in target_sessions:
+                    raise KeyError(f"Scope {scope} 中不存在 {key} 的session")
+                target_sessions.pop(key)
+                need_commit = self._is_auto_commit
 
-        if identify:
-            if identify not in target_sessions or key not in target_sessions[identify]:
-                raise KeyError(f"Scope {scope} 中不存在 {identify}::{key} 的session")
-            target_sessions = target_sessions[identify]
-        else:
-            if key not in target_sessions:
-                raise KeyError(f"Scope {scope} 中不存在 {key} 的session")
-
-        target_sessions.pop(key)
-        if self.__is_auto_commit:
+        if need_commit:
             await self.commit_data(is_info=False)
 
     def wait_for_message_checker(
-        self, obj: Union[GuildMessage, GroupMessage, C2CMessage, DirectMessage]
-    ) -> List[WaitForCommandCallback]:
+        self, obj: GuildMessage | GroupMessage | C2CMessage | DirectMessage
+    ) -> list[WaitForCommandCallback]:
         """
         检查收到的消息是否匹配任何 wait_for 注册
 
@@ -1356,15 +1468,15 @@ class SessionManager:
             obj: 收到的消息对象
 
         Returns:
-            List[WaitForCommandCallback]: 所有匹配的回调列表
+            list[WaitForCommandCallback]: 所有匹配的回调列表
                 每个回调包含 command、callback 函数和可选的 predicate
         """
         triggered_commands = []
         _scope_value = {
-            scope: self.__check_identify(scope, obj) for scope in _AllScopeStr
+            scope: self._check_identify(scope, obj) for scope in _AllScopeStr
         }
 
-        for scope_key, command_callback in self.__wait_for_registers.items():
+        for scope_key, command_callback in self._wait_for_registers.items():
             has_any_scope = False
             matched = False
             for scope in _AllScopeStr:
@@ -1378,11 +1490,12 @@ class SessionManager:
             if not has_any_scope or matched:
                 for command in command_callback:
                     predicate = getattr(command, "_predicate", None)
+                    future = command_callback[command]
                     triggered_commands.append(
                         WaitForCommandCallback(
                             command=command,
-                            callback=lambda data, cmd=command, cbs=command_callback: cbs.__setitem__(
-                                cmd, data
+                            callback=lambda data, f=future: (
+                                f.set_result(data) if not f.done() else None
                             ),
                             predicate=predicate,
                         )
@@ -1401,7 +1514,7 @@ class SessionManager:
             identify: 标识符，与 scope 配合使用
         """
         if not scope:
-            self.__wait_for_registers.clear()
+            self._wait_for_registers.clear()
             return
 
         _scope_value = {s: None for s in _AllScopeStr}
@@ -1409,8 +1522,8 @@ class SessionManager:
 
         scope_key = ScopeRegisterKey(**_scope_value)
 
-        if scope_key in self.__wait_for_registers:
-            del self.__wait_for_registers[scope_key]
+        if scope_key in self._wait_for_registers:
+            del self._wait_for_registers[scope_key]
 
 
 def with_session(func):

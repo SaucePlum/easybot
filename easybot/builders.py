@@ -51,32 +51,19 @@ class MessagesModel:
         """
         普通消息构建类
 
-        用于构建文本、图片、引用等普通消息。
+        仅负责构建普通消息体，不承载任何接口级参数。
 
         Args:
             content: 消息文本
             image: 图片 URL（网络图片）
             file_image: 本地图片（bytes/BinaryIO/文件路径）
-            media_file_info: 富媒体文件信息（v2 API）
-            message_reference_id: 引用消息 ID
-            ignore_message_reference_error: 是否忽略引用消息错误
-            is_wakeup: 是否为互动召回消息（仅单聊 v2 API）
+            media_file_info: 富媒体文件信息（群聊/单聊 v2 API）
 
         使用示例：
-            # 纯文本
             msg = MessagesModel.Message(content="Hello World")
-
-            # 图片
             msg = MessagesModel.Message(content="图片", image="https://example.com/image.png")
-
-            # 本地图片
             msg = MessagesModel.Message(content="图片", file_image="./image.png")
-
-            # 引用回复（所有场景都使用 MessageReference 对象格式）
-            msg = MessagesModel.Message(content="回复", message_reference_id="msg_id")
-
-            # 富媒体（v2 API）
-            msg = MessagesModel.Message(media_file_info="file_info_string")
+            msg = MessagesModel.Message(content="图片", media_file_info="file_info_string")
         """
 
         def __init__(
@@ -85,9 +72,6 @@ class MessagesModel:
             image: str | None = None,
             file_image: bytes | BinaryIO | str | None = None,
             media_file_info: str | None = None,
-            message_reference_id: str | None = None,
-            ignore_message_reference_error: bool = False,
-            is_wakeup: bool = False,
         ):
             if content is not None and not isinstance(content, str):
                 content = str(content)
@@ -96,9 +80,6 @@ class MessagesModel:
             self._image = image
             self._file_image = file_image
             self._media_file_info = media_file_info
-            self._message_reference_id = message_reference_id
-            self._ignore_message_reference_error = ignore_message_reference_error
-            self._is_wakeup = is_wakeup
             self._msg_type = 7 if media_file_info else 0
 
         def __repr__(self) -> str:
@@ -113,12 +94,7 @@ class MessagesModel:
             return self._msg_type
 
         def build(self) -> dict[str, Any]:
-            """
-            构建消息数据
-
-            Returns:
-                dict: 用于 API 请求的数据
-            """
+            """构建普通消息数据"""
             if (self._image or self._file_image) and self._media_file_info:
                 raise ValueError("image/file_image 与 media_file_info 不可同时存在")
 
@@ -126,15 +102,6 @@ class MessagesModel:
 
             if self._content:
                 data["content"] = self._content
-
-            if self._message_reference_id:
-                data["message_reference"] = {
-                    "message_id": self._message_reference_id,
-                    "ignore_get_message_error": self._ignore_message_reference_error,
-                }
-
-            if self._is_wakeup:
-                data["is_wakeup"] = self._is_wakeup
 
             if self._media_file_info:
                 data["media"] = {"file_info": self._media_file_info}
@@ -411,7 +378,7 @@ class MessagesModel:
 
         Args:
             content: 原生 Markdown 内容（与 template_id 二选一）
-            template_id: Markdown 模板 ID
+            template_id: Markdown 模板 ID（模板方式时必须提供 key_values）
             key_values: 模板参数，格式 {key: value} 或 [{"key": "k", "values": ["v"]}]
             keyboard_id: Keyboard 模板 ID（与 keyboard_content 二选一）
             keyboard_content: 原生 Keyboard 内容
@@ -466,7 +433,15 @@ class MessagesModel:
             return self._msg_type
 
         def build(self) -> dict[str, Any]:
-            """构建 Markdown 消息数据"""
+            """
+            构建 Markdown 消息数据
+
+            Notes:
+                - 必须提供 `content` 或 `template_id`
+                - 使用 `template_id` 时必须提供 `key_values`
+                - `keyboard_id` 与 `keyboard_content` 应二选一
+                - 会同时构建顶级 `content`，用于消息预览等场景
+            """
             data: dict[str, Any] = {}
 
             if self._content:
@@ -869,7 +844,7 @@ class TextChainBuilder:
 
         Args:
             text: 点击后插入输入框的文本，最大 100 字符
-            show: 用户在消息内看到的文本，默认取 text 值，最大 100 字符
+            show: 用户在消息内看到的文本；为 None 时不输出 show 属性，最大 100 字符
             reference: 插入输入框时是否带消息原文回复引用，默认 False
 
         Returns:

@@ -80,12 +80,6 @@ except WaitError:
 
 ## 类型系统使用
 
-### 类型别名定义
-为复杂或重复使用的类型定义别名：
-```python
-MessageContent = Union[str, MessagesModel.Message, ...]
-```
-
 ### TYPE_CHECKING 使用
 - 导入仅在类型注解中使用的模块时，使用 `TYPE_CHECKING`
 - 避免循环导入问题：
@@ -182,19 +176,21 @@ class Intent(IntEnum):
 ```
 
 ### 上下文管理器
-使用 `@contextmanager` 装饰器创建上下文管理器：
+使用 `@contextmanager` 装饰器创建上下文管理器，配合 `ContextVar` 实现协程隔离：
 ```python
 from contextlib import contextmanager
+from contextvars import ContextVar
+
+_current_obj_var: ContextVar = ContextVar("_current_obj", default=None)
 
 @contextmanager
 def bind(self, obj):
     """绑定对象的上下文管理器"""
-    old_obj = self._current_obj
-    self._current_obj = obj
+    token = self._current_obj_var.set(obj)
     try:
         yield BoundSession(self, obj)
     finally:
-        self._current_obj = old_obj
+        self._current_obj_var.reset(token)
 ```
 
 ## 枚举类型使用

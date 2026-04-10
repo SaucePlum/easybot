@@ -23,6 +23,24 @@ if TYPE_CHECKING:
     from ..bot import Bot
 
 
+class _LimiterState:
+    """
+    每个 Bot 实例独立的限制器状态
+
+    将 asyncio 原语从类变量移到实例中，
+    避免多 Bot 实例共享同一组原语导致互相干扰。
+    """
+
+    __slots__ = ("lock", "semaphore", "loop_id", "max_concurrency", "last_acquire_time")
+
+    def __init__(self):
+        self.lock: asyncio.Lock | None = None
+        self.semaphore: asyncio.Semaphore | None = None
+        self.loop_id: int | None = None
+        self.max_concurrency: int = 1
+        self.last_acquire_time: float = 0
+
+
 class SessionLimiter:
     """
     Session 启动限制器
@@ -30,57 +48,72 @@ class SessionLimiter:
     实现官方要求的 max_concurrency 限制：
     - 每 5 秒最多启动 max_concurrency 个 Session
     - 使用令牌桶算法控制并发
+
+    使用按 bot_id 隔离的状态，避免多 Bot 实例共享 asyncio 原语。
     """
 
-    _global_semaphore: asyncio.Semaphore | None = None
-    _last_acquire_time: float = 0
-    _lock: asyncio.Lock | None = None
-    _max_concurrency: int = 1
+    _instances: dict[str, _LimiterState] = {}
 
     @classmethod
-    def set_max_concurrency(cls, value: int) -> None:
+    def _get_state(cls, bot_id: str) -> _LimiterState:
+        """获取指定 Bot 的限制器状态"""
+        if bot_id not in cls._instances:
+            cls._instances[bot_id] = _LimiterState()
+        return cls._instances[bot_id]
+
+    @classmethod
+    def set_max_concurrency(cls, bot_id: str, value: int) -> None:
         """设置最大并发数（在首次 acquire 前调用）"""
-        cls._max_concurrency = value
+        cls._get_state(bot_id).max_concurrency = value
 
     @classmethod
-    async def _ensure_initialized(cls) -> None:
+    async def _ensure_initialized(cls, state: _LimiterState) -> None:
         """
-        确保限制器已初始化（线程安全）
+        确保限制器已初始化
 
-        使用双重检查锁定模式避免竞态条件。
+        检测当前事件循环是否与创建原语时一致，
+        不一致则直接创建新 Lock 替换旧的（不经过 None 中间态），
+        避免 "attached to a different loop" 异常和竞态条件。
         """
-        if cls._lock is None:
-            cls._lock = asyncio.Lock()
+        current_loop_id = id(asyncio.get_running_loop())
+        if state.loop_id != current_loop_id:
+            state.lock = asyncio.Lock()
+            state.semaphore = None
+            state.loop_id = current_loop_id
 
-        async with cls._lock:
-            if cls._global_semaphore is None:
-                cls._global_semaphore = asyncio.Semaphore(cls._max_concurrency)
+        async with state.lock:
+            if state.semaphore is None:
+                state.semaphore = asyncio.Semaphore(state.max_concurrency)
 
     @classmethod
-    async def acquire(cls) -> None:
+    async def acquire(cls, bot_id: str) -> None:
         """
         获取一个 Session 启动许可
 
         遵守 max_concurrency 限制，每 5 秒窗口内最多启动指定数量的 Session。
+        先在锁内计算等待时间并预约时间戳，再释放锁后 sleep，避免阻塞其他协程。
         """
-        await cls._ensure_initialized()
+        state = cls._get_state(bot_id)
+        await cls._ensure_initialized(state)
 
-        async with cls._lock:
+        async with state.lock:
             now = time.time()
-            elapsed = now - cls._last_acquire_time
+            elapsed = now - state.last_acquire_time
+            wait_time = max(0, 5.0 - elapsed) if state.last_acquire_time > 0 else 0
+            state.last_acquire_time = now + wait_time
 
-            if elapsed < 5.0:
-                await asyncio.sleep(5.0 - elapsed)
+        if wait_time > 0:
+            await asyncio.sleep(wait_time)
 
-            await cls._global_semaphore.acquire()
-            cls._last_acquire_time = time.time()
+        await state.semaphore.acquire()
 
     @classmethod
-    def release(cls) -> None:
+    def release(cls, bot_id: str) -> None:
         """释放 Session 启动许可"""
-        if cls._global_semaphore is not None:
+        state = cls._instances.get(bot_id)
+        if state and state.semaphore is not None:
             try:
-                cls._global_semaphore.release()
+                state.semaphore.release()
             except ValueError:
                 pass
 
@@ -143,8 +176,10 @@ class WebSocketClient(BaseWebSocketClient):
 
         await self._check_session_limit()
 
-        SessionLimiter.set_max_concurrency(self._gateway_info.max_concurrency)
-        await SessionLimiter.acquire()
+        SessionLimiter.set_max_concurrency(
+            self._bot.app_id, self._gateway_info.max_concurrency
+        )
+        await SessionLimiter.acquire(self._bot.app_id)
 
         try:
             session = await self._get_session()
@@ -174,7 +209,7 @@ class WebSocketClient(BaseWebSocketClient):
             self._logger.error(f"WebSocket 连接失败: {e}")
             raise NetworkError(f"WebSocket 连接失败: {e}")
         finally:
-            SessionLimiter.release()
+            SessionLimiter.release(self._bot.app_id)
             self._connected = False
             await cleanup_task(self._heartbeat_task, "心跳任务")
             self._heartbeat_task = None
@@ -477,16 +512,18 @@ class RemoteWebhookClient(BaseWebSocketClient):
         """建立远程 Webhook 连接"""
         session = await self._get_session()
 
-        signature = generate_remote_signature(self._bot.app_id, self._bot.app_secret)
+        signature = generate_remote_signature(self._bot.app_id, self._bot._app_secret)
 
-        ping_url = f"{self._protocol.ws_url}/ping?sign={signature}"
+        ping_url = f"{self._protocol.ws_url}/ping"
         ping_url = ping_url.replace("ws://", "http://").replace("wss://", "https://")
 
-        self._logger.debug(f"正在验证连接参数: {ping_url.split('?')[0]}")
+        self._logger.debug(f"正在验证连接参数: {ping_url}")
 
         try:
             async with session.get(
-                ping_url, timeout=aiohttp.ClientTimeout(total=10)
+                ping_url,
+                headers={"X-Signature": signature},
+                timeout=aiohttp.ClientTimeout(total=10),
             ) as resp:
                 if resp.status == 401:
                     raise AuthenticationError(
@@ -501,20 +538,40 @@ class RemoteWebhookClient(BaseWebSocketClient):
         except aiohttp.ClientError as e:
             raise NetworkError(f"远程 Webhook 连接检查失败: {e}")
 
-        ws_url_with_sign = f"{self._protocol.ws_url}?sign={signature}"
-
         self._logger.debug(f"正在连接到远程 Webhook: {self._protocol.ws_url}")
 
         try:
             timeout = aiohttp.ClientTimeout(total=self._connect_timeout)
             async with session.ws_connect(
-                ws_url_with_sign,
+                self._protocol.ws_url,
                 timeout=timeout,
             ) as ws:
                 self._ws = ws
                 self._connected = True
                 self._reconnect_count = 0
                 self._last_message_time = time.time()
+
+                await ws.send_json({"op": 0, "d": {"sign": signature}})
+
+                auth_response = await asyncio.wait_for(ws.receive(), timeout=10)
+                if auth_response.type == aiohttp.WSMsgType.TEXT:
+                    auth_data = json.loads(auth_response.data)
+                    if (
+                        auth_data.get("op") == 0
+                        and auth_data.get("d", {}).get("message") == "Authenticated"
+                    ):
+                        self._logger.debug("远程 Webhook 鉴权成功")
+                    else:
+                        raise AuthenticationError(
+                            "远程 Webhook 鉴权失败：服务器未返回认证确认"
+                        )
+                elif auth_response.type == aiohttp.WSMsgType.CLOSED:
+                    close_code = ws.close_code or 0
+                    raise AuthenticationError(
+                        f"远程 Webhook 鉴权失败：连接被关闭 (code={close_code})"
+                    )
+                elif auth_response.type == aiohttp.WSMsgType.ERROR:
+                    raise AuthenticationError("远程 Webhook 鉴权失败：连接错误")
 
                 if not self._startup_logged:
                     self._startup_logged = True

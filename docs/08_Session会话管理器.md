@@ -273,7 +273,7 @@ from easybot import Scope
 
 result_msg = await session.wait_for(
     scopes=Scope.USER,              # 单个作用域或作用域列表
-    command=["确认", "取消"],       # 字符串/列表/正则
+    command=["确认", "取消"],       # BotCommandObject / 字符串 / 列表 / 正则
     timeout=60,                     # 超时时间(秒)
     predicate=my_predicate_func,    # 可选：自定义匹配谓词函数
 )
@@ -284,7 +284,7 @@ result_msg = await session.wait_for(
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `scopes` | `str \| Sequence[str]` | ✅ | 作用域或作用域列表 |
-| `command` | `str \| Sequence[str] \| Pattern \| None` | ❌ | 要等待的命令 |
+| `command` | `BotCommandObject \| str \| Sequence[str] \| Pattern \| None` | ❌ | 要等待的命令 |
 | `timeout` | `int \| None` | ❌ | 超时时间（秒），None 表示永远等待 |
 | `predicate` | `Callable[[Any], bool] \| None` | ❌ | 自定义谓词函数 |
 | `on_timeout` | `Callable[[], Any] \| None` | ❌ | 超时回调函数 |
@@ -295,22 +295,68 @@ result_msg = await session.wait_for(
 - `WaitTimeoutError` — 等待超时时抛出
 - `WaitError` — 找不到对应的等待任务时抛出
 
-**command 参数支持多种输入格式**：
+#### command 参数支持多种输入格式
+
+**快捷方式（自动包装为默认配置的 BotCommandObject）**：
 
 ```python
-# 1. 字符串
+# 1. 字符串 — 精确匹配
 result = await session.wait_for(scopes=Scope.USER, command="确认")
 
-# 2. 列表/元组
+# 2. 列表/元组 — 匹配列表中的任意一个
 result = await session.wait_for(scopes=Scope.USER, command=["确认", "取消"])
 
-# 3. 正则表达式
+# 3. 正则表达式 — 正则匹配
 from re import compile as re_compile
 result = await session.wait_for(scopes=Scope.USER, command=re_compile(r"^(\d+)$"))
 
 # 4. None - 接受任意输入
 result = await session.wait_for(scopes=Scope.USER, command=None)
 ```
+
+**高级用法：直接传入 BotCommandObject**
+
+当需要使用更多控制参数（如权限校验、@要求、场景限制等）时，
+可以直接构造并传入 `BotCommandObject` 实例，以获得完整的功能支持：
+
+```python
+from re import compile as re_compile
+from easybot import BotCommandObject, CommandValidScenes, Scope
+
+# 示例 1: 要求管理员权限 + 自定义错误提示
+cmd = BotCommandObject(
+    command="确认",
+    admin=True,
+    admin_error_msg="⚠️ 此操作需要管理员权限",
+)
+result = await session.wait_for(scopes=Scope.USER, command=cmd)
+
+# 示例 2: 正则匹配 + 要求 @机器人
+cmd = BotCommandObject(
+    regex=re_compile(r"^\d{4}$"),
+    at=True,
+)
+result = await session.wait_for(scopes=Scope.USER, command=cmd)
+
+# 示例 3: 限制有效场景（仅在频道和群聊生效）
+cmd = BotCommandObject(
+    command="开始",
+    valid_scenes=CommandValidScenes.GUILD | CommandValidScenes.GROUP,
+)
+result = await session.wait_for(scopes=Scope.USER, command=cmd)
+
+# 示例 4: 要求机器人管理员权限
+cmd = BotCommandObject(
+    command="shutdown",
+    is_require_bot_admin=True,
+    bot_admin_error_msg="⚠️ 仅机器人管理员可执行此操作",
+)
+result = await session.wait_for(scopes=Scope.USER, command=cmd)
+```
+
+> **注意**: 使用快捷方式传入 `str`/`list`/`Pattern` 时，内部会自动包装为
+> `BotCommandObject(command=..., valid_scenes=CommandValidScenes.ALL)`。
+> 如果需要更细粒度的控制（如限制触发场景、权限校验等），请直接传入 `BotCommandObject`。
 
 ---
 
@@ -559,13 +605,11 @@ async def handle_vote(msg: Model.GroupMessage) -> None:
 跨场景继续对话依赖 `Scope.USER` 在不同消息场景中提取到同一用户标识符；如果你发现用户在频道/群聊/C2C 场景下标识不一致，会表现为“跨场景无法命中 wait_for”。
 
 ```python
-from typing import Any
-
 from easybot import CommandValidScenes, Model, Scope, WaitError, WaitTimeoutError
 
 @bot.on_command(command="/wizard", valid_scenes=CommandValidScenes.ALL)
 async def wizard(
-    msg: Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Model.DirectMessage,
+    msg: Model.Message,
 ) -> None:
     with bot.session.bind(msg) as s:
         await s.new(

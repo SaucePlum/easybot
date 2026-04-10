@@ -3,12 +3,17 @@
 EasyBot SDK 示例 13：插件热重载功能
 
 展示 EasyBot 的插件热重载功能：
-- 通过 Bot 实例热重载插件
-- 通过 Plugins 类热重载插件
+- 通过 Bot 实例热重载插件（触发 on_plugin_unload / on_plugin_load 钩子）
 - 动态启用/禁用命令
 - 查看插件和命令信息
+- 插件生命周期钩子演示（plugins/lifecycle_demo.py）
 
 运行前请将 app_id 和 app_secret 替换为你的机器人凭证
+
+关于热重载与钩子的关系：
+- bot.reload_plugin() / bot.unload_plugin() → 触发生命周期钩子 ✅
+- Plugins.reload_plugin() / Plugins.unload_plugin() → 仅数据操作，不触发钩子
+- Bot 关闭时 → 自动触发所有已加载插件的 on_plugin_unload
 """
 
 from easybot import Bot, CommandValidScenes, Model
@@ -29,6 +34,10 @@ def main() -> None:
         bot.logger.info("机器人启动成功！")
         plugins = bot.get_loaded_plugins()
         bot.logger.info(f"已加载 {len(plugins)} 个插件: {plugins}")
+        bot.logger.info(
+            "提示: 插件可通过定义 on_plugin_load(bot)/on_plugin_unload(bot) "
+            "实现生命周期钩子，参见 plugins/lifecycle_demo.py"
+        )
 
     @bot.on_command(
         command="/热重载",
@@ -54,7 +63,7 @@ def main() -> None:
 
         if result["success"]:
             await msg.reply(
-                f"✅ 插件 {result['module']} 热重载成功\n"
+                f"✅ 插件 {result['module']} 热重载成功（已触发生命周期钩子）\n"
                 f"卸载: {result['unloaded']['commands']} 命令\n"
                 f"加载: {result['loaded']['commands']} 命令"
             )

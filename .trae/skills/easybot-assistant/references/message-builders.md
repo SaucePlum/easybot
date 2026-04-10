@@ -15,9 +15,9 @@
 
 ## 概述
 
-EasyBot 提供了丰富的消息构建器，支持多种消息格式：
+EasyBot 提供了丰富的消息内容表达方式，支持多种消息格式：
 
-- **Message**：普通文本+图片消息
+- **普通消息参数**：直接通过发送接口 / `reply()` 传 `content`、`image`、`file_image`、`media_file_info`
 - **MessageEmbed**：嵌入式卡片消息
 - **MessageArk23/24/37**：模板消息
 - **MessageMarkdown**：Markdown 格式消息
@@ -30,40 +30,95 @@ from easybot import MessagesModel
 
 ---
 
-## 普通消息
+## 普通消息参数
 
 ### 文本消息
 
 ```python
-content = MessagesModel.Message(content="Hello World")
-
-# 发送
-await bot.api.send_guild_message(channel_id="xxx", content=content)
+await bot.api.send_guild_message(channel_id="xxx", content="Hello World")
 # 或
-await msg.reply(content)
+await msg.reply("Hello World")
 ```
 
 ### 带图片消息
 
 ```python
 # 通过 URL
+await bot.api.send_guild_message(
+    channel_id="xxx",
+    content="图片消息",
+    image="https://example.com/image.png",
+)
+
+# 通过本地文件路径
+await bot.api.send_guild_message(
+    channel_id="xxx",
+    content="本地图片",
+    file_image="./image.png",
+)
+
+# 通过二进制数据
+with open("image.png", "rb") as f:
+    await bot.api.send_guild_message(
+        channel_id="xxx",
+        content="二进制图片",
+        file_image=f.read(),
+    )
+```
+
+### Message 构建器
+
+使用 `MessagesModel.Message` 构建器创建消息对象：
+
+```python
+from easybot import MessagesModel
+
+# 文本消息
+msg = MessagesModel.Message(content="Hello World")
+
+# 文本 + 图片
 msg = MessagesModel.Message(
     content="图片消息",
     image="https://example.com/image.png"
 )
 
-# 通过本地文件路径
+# 文本 + 本地图片
 msg = MessagesModel.Message(
     content="本地图片",
     file_image="./image.png"
 )
 
-# 通过二进制数据
-with open("image.png", "rb") as f:
-    msg = MessagesModel.Message(
-        content="二进制图片",
-        file_image=f.read()
-    )
+# 富媒体消息（群聊/单聊 v2 API）
+msg = MessagesModel.Message(
+    content="富媒体消息",
+    media_file_info="file_info_string"
+)
+
+await bot.api.send_guild_message(channel_id="xxx", **msg.build())
+```
+
+**Message 参数说明**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| content | str \| int \| float | 否 | 消息文本内容 |
+| image | str | 否 | 图片 URL（网络图片） |
+| file_image | bytes \| BinaryIO \| str | 否 | 本地图片（bytes、文件对象或文件路径） |
+| media_file_info | str | 否 | 富媒体文件信息（群聊/单聊 v2 API） |
+
+**msg_type 属性**：
+
+Message 构建器提供 `msg_type` 属性，用于标识消息类型：
+
+- `msg_type = 0`：普通消息（默认）
+- `msg_type = 7`：富媒体消息（使用 media_file_info 时）
+
+```python
+msg = MessagesModel.Message(content="普通消息")
+print(msg.msg_type)  # 0
+
+msg = MessagesModel.Message(media_file_info="file_info")
+print(msg.msg_type)  # 7
 ```
 
 ### 简化写法
@@ -218,6 +273,31 @@ md = MessagesModel.MessageMarkdown(
 
 await msg.reply(md)
 ```
+
+### 带 Keyboard 模板的消息
+
+使用预定义的 Keyboard 模板：
+
+```python
+md = MessagesModel.MessageMarkdown(
+    content="# 标题",
+    keyboard_id="your_keyboard_template_id"  # Keyboard 模板 ID
+)
+
+await msg.reply(md)
+```
+
+### 参数说明
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| content | str | 否* | 原生 Markdown 内容（与 template_id 二选一） |
+| template_id | str | 否* | Markdown 模板 ID（模板方式时必须提供 key_values） |
+| key_values | dict \| list | 否 | 模板参数，格式 `{key: value}` 或 `[{"key": "k", "values": ["v"]}]` |
+| keyboard_id | str | 否 | Keyboard 模板 ID（与 keyboard_content 二选一） |
+| keyboard_content | dict | 否 | 原生 Keyboard 内容（与 keyboard_id 二选一） |
+
+**注意**：`content` 和 `template_id` 必须二选一。
 
 ### Markdown 示例
 
@@ -428,13 +508,11 @@ result = await bot.api.upload_media(
 ### 发送富媒体消息
 
 ```python
-# 使用 Message 发送
-content = MessagesModel.Message(
-    content="图片消息",
-    media_file_info=result.file_info
+# 直接通过 media_file_info 发送
+await msg.reply(
+    "图片消息",
+    media_file_info=result.file_info,
 )
-
-await msg.reply(content)
 ```
 
 ---
@@ -445,13 +523,15 @@ await msg.reply(content)
 
 ### ThreadContentBuilder - 帖子内容构建器
 
+用于构建 ThreadContent 对象，简化 JSON 格式发帖。支持添加文本段落、图片段落和自定义段落。
+
 ```python
-from easybot import Builders
+from easybot import Builders, Model
 
 builder = Builders.ThreadContentBuilder()
 builder.add_text_paragraph("第一段文字")
 builder.add_image_paragraph("https://example.com/image.png")
-builder.add_text_paragraph("第二段文字", bold=True)
+builder.add_text_paragraph("第二段文字", bold=True, alignment=Model.Alignment.ALIGNMENT_CENTER)
 
 content = builder.build()
 
@@ -462,15 +542,74 @@ await bot.api.create_thread(
 )
 ```
 
-### ParagraphBuilder - 段落构建器
+**方法说明**：
+
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `add_paragraph(paragraph)` | paragraph: ThreadContentParagraph 或 ParagraphBuilder | 添加段落对象或构建器 |
+| `add_text_paragraph(text, bold=False, italic=False, underline=False, alignment=0)` | text: 文本内容<br>bold: 是否加粗<br>italic: 是否斜体<br>underline: 是否下划线<br>alignment: 对齐方式 | 添加纯文本段落（快捷方法） |
+| `add_image_paragraph(third_url, width_percent=1.0, alignment=0)` | third_url: 图片链接<br>width_percent: 宽度比例<br>alignment: 对齐方式 | 添加图片段落（快捷方法） |
+| `build()` | - | 构建 ThreadContent 对象 |
+
+**高级用法 - 混合段落**：
 
 ```python
+from easybot import Builders, Model
+
+# 使用 ParagraphBuilder 创建复杂段落
+paragraph_builder = Builders.ParagraphBuilder()
+paragraph_builder.add_text("这是标题", bold=True)
+paragraph_builder.add_text(" - ")
+paragraph_builder.add_url("https://example.com", desc="点击查看")
+paragraph_builder.set_alignment(Model.Alignment.ALIGNMENT_CENTER)
+
+# 添加到帖子内容
+content_builder = Builders.ThreadContentBuilder()
+content_builder.add_paragraph(paragraph_builder)
+content_builder.add_image_paragraph("https://example.com/image.png")
+content_builder.add_text_paragraph("这是正文内容")
+
+content = content_builder.build()
+```
+
+### ParagraphBuilder - 段落构建器
+
+用于构建 ThreadContentParagraph 对象，提供流畅的 API。可以混合添加文本、图片、视频、链接等元素。
+
+```python
+from easybot import Builders
+
 builder = Builders.ParagraphBuilder()
 builder.add_text("普通文本")
 builder.add_text("粗体文本", bold=True)
+builder.add_text("斜体下划线", italic=True, underline=True)
 builder.add_image("https://example.com/image.png")
+builder.add_video("https://example.com/video.mp4")
+builder.add_url("https://example.com", desc="访问链接")
+builder.set_alignment(1)  # 居中对齐
 
 paragraph = builder.build()
+```
+
+**方法说明**：
+
+| 方法 | 参数 | 说明 |
+|------|------|------|
+| `add_text(text, bold=False, italic=False, underline=False)` | text: 文本内容<br>bold: 是否加粗<br>italic: 是否斜体<br>underline: 是否下划线 | 添加文本元素 |
+| `add_image(third_url, width_percent=1.0)` | third_url: 图片链接<br>width_percent: 宽度比例（0.0-1.0） | 添加图片元素 |
+| `add_video(third_url)` | third_url: 视频链接 | 添加视频元素 |
+| `add_url(url, desc="")` | url: 链接地址<br>desc: 链接描述 | 添加链接元素 |
+| `set_alignment(alignment)` | alignment: 对齐方式（使用 Alignment 枚举） | 设置段落对齐方式 |
+| `build()` | - | 构建 ThreadContentParagraph 对象 |
+
+**对齐方式枚举（Alignment）**：
+
+```python
+from easybot import Model
+
+Model.Alignment.ALIGNMENT_LEFT    # 0 - 左对齐（默认）
+Model.Alignment.ALIGNMENT_MIDDLE  # 1 - 居中对齐
+Model.Alignment.ALIGNMENT_RIGHT   # 2 - 右对齐
 ```
 
 ### TextChainBuilder - 文本交互构建器
@@ -528,11 +667,35 @@ await msg.reply(content)
 
 ## 消息类型对照表
 
-| 类型 | 用途 | 支持场景 |
-|------|------|----------|
-| Message | 普通文本/图片 | 全部 |
-| MessageEmbed | 卡片消息 | 频道、群聊、单聊 |
-| MessageArk23 | 文本+链接列表 | 频道、群聊、单聊 |
-| MessageArk24 | 图文卡片 | 频道、群聊、单聊 |
-| MessageArk37 | 大图卡片 | 频道、群聊、单聊 |
-| MessageMarkdown | Markdown+按钮 | 频道、群聊、单聊 |
+| 类型 | msg_type | 用途 | 支持场景 |
+|------|----------|------|----------|
+| Message | 0 (普通) / 7 (富媒体) | 普通文本/图片 | 全部 |
+| MessageEmbed | 4 | 卡片消息 | 频道、群聊、单聊 |
+| MessageArk23 | 3 | 文本+链接列表 | 频道、群聊、单聊 |
+| MessageArk24 | 3 | 图文卡片 | 频道、群聊、单聊 |
+| MessageArk37 | 3 | 大图卡片 | 频道、群聊、单聊 |
+| MessageMarkdown | 2 | Markdown+按钮 | 频道、群聊、单聊 |
+
+**msg_type 说明**：
+
+所有消息构建器都提供 `msg_type` 属性，用于标识消息类型：
+
+```python
+from easybot import MessagesModel
+
+# 普通消息
+msg = MessagesModel.Message(content="文本")
+print(msg.msg_type)  # 0
+
+# Embed 消息
+embed = MessagesModel.MessageEmbed(title="标题")
+print(embed.msg_type)  # 4
+
+# Ark 消息
+ark = MessagesModel.MessageArk23(content=["文本"], link=["链接"])
+print(ark.msg_type)  # 3
+
+# Markdown 消息
+md = MessagesModel.MessageMarkdown(content="# 标题")
+print(md.msg_type)  # 2
+```

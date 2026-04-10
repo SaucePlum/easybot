@@ -14,29 +14,22 @@ EasyBot SDK API 模块
 - 其他 API
 """
 
+import asyncio
 import base64
+import hashlib
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import aiohttp
 
 from ._internal import HTTPClient
 from .builders import MessagesModel
+from .exceptions import APIError
 from .models import Model
 
 if TYPE_CHECKING:
     from .bot import Bot
-
-MessageContent = Union[
-    str,
-    MessagesModel.Message,
-    MessagesModel.MessageEmbed,
-    MessagesModel.MessageArk23,
-    MessagesModel.MessageArk24,
-    MessagesModel.MessageArk37,
-    MessagesModel.MessageMarkdown,
-]
 
 
 class API:
@@ -254,17 +247,27 @@ class API:
     async def _send_message(
         self,
         endpoint: str,
-        content: MessageContent | None = None,
+        content: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
         image: str | None = None,
-        file_image: bytes | str | None = None,
+        file_image: bytes | BinaryIO | str | None = None,
+        media_file_info: str | None = None,
         msg_id: str | None = None,
         event_id: str | None = None,
-        msg_type: str | None = None,
+        msg_type: int | None = None,
         msg_seq: int | None = None,
+        is_wakeup: bool = False,
         message_reference_id: str | None = None,
         ignore_message_reference_error: bool = False,
         response_model: type = Model.GuildMessage,
-        require_content: bool = False,
         **kwargs,
     ) -> Any:
         """
@@ -273,58 +276,108 @@ class API:
         Args:
             endpoint: API 端点
             content: 消息内容，可以是文本或消息对象
-            image: 图片 URL（当 content 为文本时使用）
-            file_image: 图片数据，支持 bytes 或文件路径（当 content 为文本时使用）
+            image: 图片 URL（普通消息）
+            file_image: 图片数据，支持 bytes、BinaryIO 或文件路径（普通消息）
+            media_file_info: 富媒体文件信息（群聊/单聊 v2）
             msg_id: 要回复的消息 ID（被动消息）
             event_id: 要回复的事件 ID（被动消息）
-            msg_type: 消息类型（群聊/单聊需要）
+            msg_type: 消息类型（群聊/单聊 v2 需要）
             msg_seq: 回复消息的序号（群聊/单聊需要）
-            message_reference_id: 引用消息 ID（引用回复）
+            is_wakeup: 是否发送互动召回消息（仅 QQ 单聊 v2）
+            message_reference_id: 引用消息 ID
             ignore_message_reference_error: 是否忽略引用消息错误
             response_model: 响应模型类
-            require_content: 是否要求必须有文本内容（群聊需要）
             **kwargs: 其他参数
 
         Returns:
             响应模型实例
         """
         http = await self._get_http()
+        structured_message_types = (
+            MessagesModel.MessageEmbed,
+            MessagesModel.MessageArk23,
+            MessagesModel.MessageArk24,
+            MessagesModel.MessageArk37,
+            MessagesModel.MessageMarkdown,
+        )
+        is_group_or_c2c_v2 = endpoint.startswith("/v2/groups/") or endpoint.startswith(
+            "/v2/users/"
+        )
+        is_c2c_v2 = endpoint.startswith("/v2/users/")
+        if content is not None and not isinstance(
+            content, (str, MessagesModel.Message, *structured_message_types)
+        ):
+            content = str(content)
 
-        if isinstance(content, str) or content is None:
-            if content is None and image is None and file_image is None:
-                raise ValueError("content、image 和 file_image 至少需要提供一个")
-            if content is not None:
-                content = MessagesModel.Message(
-                    content=content,
-                    image=image,
-                    file_image=file_image,
-                    message_reference_id=message_reference_id,
-                    ignore_message_reference_error=ignore_message_reference_error,
+        is_message_object = isinstance(content, MessagesModel.Message)
+        is_structured_content = isinstance(content, structured_message_types)
+
+        if is_message_object or is_structured_content:
+            if (
+                image is not None
+                or file_image is not None
+                or media_file_info is not None
+            ):
+                raise ValueError(
+                    "消息构建器对象不能与 image、file_image、media_file_info 同时传入"
                 )
-            else:
-                content = MessagesModel.Message(
-                    image=image,
-                    file_image=file_image,
-                    message_reference_id=message_reference_id,
-                    ignore_message_reference_error=ignore_message_reference_error,
+            payload = content.build()
+        else:
+            if (
+                content is None
+                and image is None
+                and file_image is None
+                and media_file_info is None
+            ):
+                raise ValueError(
+                    "content、image、file_image 和 media_file_info 至少需要提供一个"
                 )
-        elif message_reference_id:
-            if hasattr(content, "_message_reference_id"):
-                content._message_reference_id = message_reference_id
-                content._ignore_message_reference_error = ignore_message_reference_error
 
-        payload = content.build()
+            if (image or file_image) and media_file_info:
+                raise ValueError("image/file_image 与 media_file_info 不可同时存在")
 
-        if require_content and not payload.get("content"):
-            raise ValueError(
-                "群聊消息必须有文本内容(content)，纯图片/富媒体请配合文本使用"
+            content = MessagesModel.Message(
+                content=content,
+                image=image,
+                file_image=file_image,
+                media_file_info=media_file_info,
             )
+            payload = content.build()
+
+        if message_reference_id:
+            payload["message_reference"] = {
+                "message_id": message_reference_id,
+                "ignore_get_message_error": ignore_message_reference_error,
+            }
+
+        if is_wakeup:
+            payload["is_wakeup"] = True
+
+        if is_group_or_c2c_v2:
+            if "image" in payload or "file_image" in payload:
+                raise ValueError(
+                    "群聊/单聊 v2 消息不支持 image/file_image，请先 upload_media 再传 media_file_info"
+                )
+            if msg_type is None:
+                msg_type = getattr(content, "msg_type", None)
+            if payload.get("is_wakeup"):
+                if not is_c2c_v2:
+                    raise ValueError("is_wakeup 仅支持 QQ 单聊 v2 消息")
+                if msg_id or event_id:
+                    raise ValueError("is_wakeup 与 msg_id、event_id 互斥")
+        else:
+            if "media" in payload:
+                raise ValueError(
+                    "频道消息/频道私信不支持 media_file_info，请使用 image 或 file_image"
+                )
+            if payload.get("is_wakeup"):
+                raise ValueError("is_wakeup 仅支持 QQ 单聊 v2 消息")
 
         if msg_id:
             payload["msg_id"] = msg_id
         if event_id:
             payload["event_id"] = event_id
-        if msg_type:
+        if msg_type is not None:
             payload["msg_type"] = msg_type
         if msg_seq is not None:
             payload["msg_seq"] = msg_seq
@@ -358,9 +411,18 @@ class API:
     async def send_guild_message(
         self,
         channel_id: str,
-        content: MessageContent | None = None,
+        content: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
         image: str | None = None,
-        file_image: bytes | str | None = None,
+        file_image: bytes | BinaryIO | str | None = None,
         msg_id: str | None = None,
         event_id: str | None = None,
         message_reference_id: str | None = None,
@@ -375,17 +437,12 @@ class API:
 
         Args:
             channel_id: 子频道 ID
-            content: 消息内容，可以是文本或消息对象
-                      - str: 文本消息
-                      - MessagesModel.Message: 普通消息
-                      - MessagesModel.MessageEmbed: Embed 消息
-                      - MessagesModel.MessageArk23/24/37: Ark 模板消息
-                      - MessagesModel.MessageMarkdown: Markdown 消息
-            image: 图片 URL（当 content 为文本时使用）
-            file_image: 图片数据，支持 bytes 或文件路径（当 content 为文本时使用）
+            content: 消息内容，可以是文本、普通消息构建器或结构化消息对象
+            image: 图片 URL（普通消息）
+            file_image: 图片数据，支持 bytes、BinaryIO 或文件路径（普通消息）
             msg_id: 要回复的消息 ID（被动消息）
             event_id: 要回复的事件 ID（被动消息）
-            message_reference_id: 引用消息 ID（引用回复）
+            message_reference_id: 引用消息 ID
             ignore_message_reference_error: 是否忽略引用消息错误
 
         Returns:
@@ -393,7 +450,6 @@ class API:
 
         使用示例：
             # 方式一：消息对象
-            await api.send_guild_message(channel_id, MessagesModel.Message(content="Hello"))
             await api.send_guild_message(channel_id, MessagesModel.MessageEmbed(title="标题"))
             await api.send_guild_message(channel_id, MessagesModel.MessageMarkdown(content="# 标题"))
 
@@ -464,7 +520,16 @@ class API:
         self,
         channel_id: str,
         patch_msg_id: str,
-        content: MessageContent | None = None,
+        content: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
         msg_id: str | None = None,
         event_id: str | None = None,
     ) -> Model.GuildMessage:
@@ -509,7 +574,7 @@ class API:
 
         if content is not None:
             if isinstance(content, str):
-                content = MessagesModel.Message(content=content)
+                content = MessagesModel.MessageMarkdown(content=content)
             built = content.build()
             for key in ("markdown", "keyboard"):
                 if key in built and built[key]:
@@ -521,11 +586,23 @@ class API:
     async def send_group_message(
         self,
         group_openid: str,
-        content: MessageContent | None = None,
+        content: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
+        media_file_info: str | None = None,
         event_id: str | None = None,
         msg_id: str | None = None,
+        msg_type: int | None = None,
         msg_seq: int | None = None,
         message_reference_id: str | None = None,
+        ignore_message_reference_error: bool = False,
     ) -> Model.GroupSendMessageResponse:
         """
         发送群聊消息
@@ -536,16 +613,14 @@ class API:
 
         Args:
             group_openid: 群 openid
-            content: 消息内容，可以是文本或消息对象
-                      - str: 文本消息
-                      - MessagesModel.Message: 普通消息
-                      - MessagesModel.MessageEmbed: Embed 消息
-                      - MessagesModel.MessageArk23/24/37: Ark 模板消息
-                      - MessagesModel.MessageMarkdown: Markdown 消息
+            content: 消息内容，可以是文本、普通消息构建器或结构化消息对象
+            media_file_info: 富媒体文件信息（群聊 v2）
             event_id: 前置收到的事件 ID（被动消息）
             msg_id: 要回复的消息 ID（被动消息）
-            msg_seq: 回复消息的序号
-            message_reference_id: 引用消息 ID（引用回复）
+            msg_type: 消息类型，默认按内容自动推断
+            msg_seq: 回复消息的序号，与 msg_id 联合使用避免重复发送
+            message_reference_id: 引用消息 ID
+            ignore_message_reference_error: 是否忽略引用消息错误
 
         Returns:
             Model.GroupSendMessageResponse: 发送的消息响应
@@ -553,6 +628,13 @@ class API:
         使用示例：
             # 文本消息
             await api.send_group_message(group_openid, "Hello")
+
+            # 富媒体消息
+            await api.send_group_message(
+                group_openid,
+                content="图片",
+                media_file_info="file_info_string",
+            )
 
             # Markdown 消息
             await api.send_group_message(group_openid, MessagesModel.MessageMarkdown(content="# 标题"))
@@ -567,17 +649,14 @@ class API:
         return await self._send_message(
             endpoint,
             content=content,
+            media_file_info=media_file_info,
             msg_id=msg_id,
             event_id=event_id,
+            msg_type=msg_type,
             msg_seq=msg_seq,
             message_reference_id=message_reference_id,
-            msg_type=(
-                getattr(content, "msg_type", None)
-                if content and not isinstance(content, str)
-                else None
-            ),
+            ignore_message_reference_error=ignore_message_reference_error,
             response_model=Model.GroupSendMessageResponse,
-            require_content=True,
         )
 
     async def recall_group_message(
@@ -603,11 +682,24 @@ class API:
     async def send_c2c_message(
         self,
         openid: str,
-        content: MessageContent | None = None,
+        content: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
+        media_file_info: str | None = None,
         event_id: str | None = None,
         msg_id: str | None = None,
+        msg_type: int | None = None,
         msg_seq: int | None = None,
+        is_wakeup: bool = False,
         message_reference_id: str | None = None,
+        ignore_message_reference_error: bool = False,
     ) -> Model.C2CSendMessageResponse:
         """
         发送单聊消息
@@ -618,16 +710,15 @@ class API:
 
         Args:
             openid: 用户 openid
-            content: 消息内容，可以是文本或消息对象
-                      - str: 文本消息
-                      - MessagesModel.Message: 普通消息
-                      - MessagesModel.MessageEmbed: Embed 消息
-                      - MessagesModel.MessageArk23/24/37: Ark 模板消息
-                      - MessagesModel.MessageMarkdown: Markdown 消息
+            content: 消息内容，可以是文本、普通消息构建器或结构化消息对象
+            media_file_info: 富媒体文件信息（QQ 单聊 v2）
             event_id: 前置收到的事件 ID（被动消息）
             msg_id: 要回复的消息 ID（被动消息）
-            msg_seq: 回复消息的序号
-            message_reference_id: 引用消息 ID（引用回复）
+            msg_type: 消息类型，默认按内容自动推断
+            msg_seq: 回复消息的序号，与 msg_id 联合使用避免重复发送
+            is_wakeup: 是否发送互动召回消息
+            message_reference_id: 引用消息 ID
+            ignore_message_reference_error: 是否忽略引用消息错误
 
         Returns:
             Model.C2CSendMessageResponse: 发送的消息响应
@@ -635,6 +726,13 @@ class API:
         使用示例：
             # 文本消息
             await api.send_c2c_message(openid, "Hello")
+
+            # 富媒体消息
+            await api.send_c2c_message(
+                openid,
+                content="图片",
+                media_file_info="file_info_string",
+            )
 
             # Markdown 消息
             await api.send_c2c_message(openid, MessagesModel.MessageMarkdown(content="# 标题"))
@@ -649,15 +747,14 @@ class API:
         return await self._send_message(
             endpoint,
             content=content,
+            media_file_info=media_file_info,
             msg_id=msg_id,
             event_id=event_id,
+            msg_type=msg_type,
             msg_seq=msg_seq,
+            is_wakeup=is_wakeup,
             message_reference_id=message_reference_id,
-            msg_type=(
-                getattr(content, "msg_type", None)
-                if content and not isinstance(content, str)
-                else None
-            ),
+            ignore_message_reference_error=ignore_message_reference_error,
             response_model=Model.C2CSendMessageResponse,
         )
 
@@ -704,9 +801,18 @@ class API:
     async def send_direct_message(
         self,
         guild_id: str,
-        content: MessageContent | None = None,
+        content: (
+            str
+            | MessagesModel.Message
+            | MessagesModel.MessageEmbed
+            | MessagesModel.MessageArk23
+            | MessagesModel.MessageArk24
+            | MessagesModel.MessageArk37
+            | MessagesModel.MessageMarkdown
+            | None
+        ) = None,
         image: str | None = None,
-        file_image: bytes | str | None = None,
+        file_image: bytes | BinaryIO | str | None = None,
         msg_id: str | None = None,
         event_id: str | None = None,
         message_reference_id: str | None = None,
@@ -721,17 +827,12 @@ class API:
 
         Args:
             guild_id: 私信频道 ID
-            content: 消息内容，可以是文本或消息对象
-                      - str: 文本消息
-                      - MessagesModel.Message: 普通消息
-                      - MessagesModel.MessageEmbed: Embed 消息
-                      - MessagesModel.MessageArk23/24/37: Ark 模板消息
-                      - MessagesModel.MessageMarkdown: Markdown 消息
-            image: 图片 URL（当 content 为文本时使用）
-            file_image: 图片数据，支持 bytes 或文件路径（当 content 为文本时使用）
+            content: 消息内容，可以是文本、普通消息构建器或结构化消息对象
+            image: 图片 URL（普通消息）
+            file_image: 图片数据，支持 bytes、BinaryIO 或文件路径（普通消息）
             msg_id: 要回复的消息 ID（被动消息）
             event_id: 要回复的事件 ID（被动消息）
-            message_reference_id: 引用消息 ID（引用回复，对象格式）
+            message_reference_id: 引用消息 ID
             ignore_message_reference_error: 是否忽略引用消息错误
 
         Returns:
@@ -739,7 +840,6 @@ class API:
 
         使用示例：
             # 方式一：消息对象
-            await api.send_direct_message(guild_id, MessagesModel.Message(content="Hello"))
             await api.send_direct_message(guild_id, MessagesModel.MessageEmbed(title="标题"))
 
             # 方式二：文本+参数
@@ -1919,6 +2019,7 @@ class API:
         srv_send_msg: bool = False,
         user_openid: str | None = None,
         group_openid: str | None = None,
+        file_name: str | None = None,
     ) -> Model.FileInfo:
         """
         上传富媒体文件（QQ单聊和QQ群聊通用）
@@ -1932,16 +2033,25 @@ class API:
             srv_send_msg: 是否直接发送消息到目标端，设置为 True 会直接发送消息且占用主动消息频次
             user_openid: 用户 openid（单聊时使用，与 group_openid 二选一）
             group_openid: 群 openid（群聊时使用，与 user_openid 二选一）
+            file_name: 文件名（包含扩展名），当 file_type=4（文件）时必填
 
         Returns:
             Model.FileInfo: 包含 file_uuid、file_info、ttl 字段的响应
 
         使用示例：
-            # 方式一：文件路径
+            # 上传图片
             result = await api.upload_media(
                 file_type=1,
                 file_data="./image.png",
                 user_openid="xxx"
+            )
+
+            # 上传文件（file_type=4 时必须指定 file_name）
+            result = await api.upload_media(
+                file_type=4,
+                file_data="./document.pdf",
+                file_name="document.pdf",  # 必填
+                group_openid="group_xxx"
             )
 
             # 方式二：二进制数据
@@ -1962,6 +2072,7 @@ class API:
         注意:
             url 和 file_data 必须提供其中之一
             user_openid 和 group_openid 必须提供其中之一，不能同时提供
+            当 file_type=4（文件类型）时，file_name 为必填项
         """
         if not url and not file_data:
             raise ValueError("url 和 file_data 必须提供其中之一")
@@ -1972,8 +2083,15 @@ class API:
         if not user_openid and not group_openid:
             raise ValueError("user_openid 和 group_openid 必须提供其中之一")
 
+        if file_type == 4 and not file_name:
+            raise ValueError("file_type=4（文件类型）时，file_name 为必填项")
+
         http = await self._get_http()
         payload = {"file_type": file_type, "srv_send_msg": srv_send_msg}
+
+        if file_name:
+            # 当 file_type=4（文件）时，file_name 必须包含扩展名
+            payload["file_name"] = file_name
 
         payload["url"] = url if url else ""
         if file_data:
@@ -2094,3 +2212,560 @@ class API:
         )
 
         return response
+
+    async def upload_prepare(
+        self,
+        file_type: int,
+        file_name: str,
+        file_size: int,
+        md5: str,
+        sha1: str,
+        md5_10m: str,
+        user_openid: str | None = None,
+        group_openid: str | None = None,
+    ) -> Model.UploadPrepareResponse:
+        """
+        申请大文件分片上传（自动识别单聊/群聊）
+
+        Args:
+            file_type: 媒体类型（1 图片、2 视频、3 语音、4 文件）
+            file_name: 文件名（包含扩展名）
+            file_size: 文件大小（字节）
+            md5: 文件完整 MD5（十六进制）
+            sha1: 文件完整 SHA1（十六进制）
+            md5_10m: 文件前 10002432 字节的 MD5（十六进制）；文件不足该大小时为整文件 MD5
+            user_openid: 用户 openid（单聊时使用，与 group_openid 二选一）
+            group_openid: 群 openid（群聊时使用，与 user_openid 二选一）
+
+        Returns:
+            Model.UploadPrepareResponse: 包含 upload_id、block_size 和 parts 的响应
+
+        使用示例：
+            import hashlib
+
+            # 读取文件计算哈希
+            with open("large_file.mp4", "rb") as f:
+                file_data = f.read()
+                file_md5 = hashlib.md5(file_data).hexdigest()
+                file_sha1 = hashlib.sha1(file_data).hexdigest()
+                md5_10m = hashlib.md5(file_data[:10002432]).hexdigest() if len(file_data) >= 10002432 else file_md5
+
+            # 单聊场景
+            result = await api.upload_prepare(
+                file_type=2,  # 视频
+                file_name="large_file.mp4",
+                file_size=len(file_data),
+                md5=file_md5,
+                sha1=file_sha1,
+                md5_10m=md5_10m,
+                user_openid="user_xxx",
+            )
+
+            # 群聊场景
+            result = await api.upload_prepare(
+                file_type=2,
+                file_name="large_file.mp4",
+                file_size=len(file_data),
+                md5=file_md5,
+                sha1=file_sha1,
+                md5_10m=md5_10m,
+                group_openid="group_xxx",
+            )
+        """
+        if user_openid and group_openid:
+            raise ValueError("user_openid 和 group_openid 不能同时提供")
+
+        if not user_openid and not group_openid:
+            raise ValueError("user_openid 和 group_openid 必须提供其中之一")
+
+        http = await self._get_http()
+
+        if user_openid:
+            endpoint = f"/v2/users/{user_openid}/upload_prepare"
+            target_id = user_openid
+            target_type = "单聊"
+        else:
+            endpoint = f"/v2/groups/{group_openid}/upload_prepare"
+            target_id = group_openid
+            target_type = "群聊"
+
+        payload = {
+            "file_type": file_type,
+            "file_name": file_name,
+            "file_size": file_size,
+            "md5": md5,
+            "sha1": sha1,
+            "md5_10m": md5_10m,
+        }
+
+        self._logger.debug(
+            f"申请大文件分片上传: target_type={target_type}, target_id={target_id}, "
+            f"file_name={file_name}, file_size={file_size}, file_type={file_type}"
+        )
+
+        data = await http.post(endpoint, json=payload)
+        response = Model.UploadPrepareResponse.from_dict(data)
+
+        self._logger.debug(
+            f"分片上传申请成功: upload_id={response.upload_id}, "
+            f"block_size={response.block_size}, parts_count={len(response.parts)}"
+        )
+
+        return response
+
+    async def upload_part(
+        self,
+        presigned_url: str,
+        part_data: bytes,
+        upload_id: str,
+        part_index: int,
+        user_openid: str | None = None,
+        group_openid: str | None = None,
+        retry_timeout: int | None = None,
+    ) -> bool:
+        """
+        上传单个分片（自动识别单聊/群聊）
+
+        这是一个高级封装方法，自动完成：
+        1. 计算分片 MD5
+        2. PUT 到预签名 URL（对象存储）
+        3. 通知平台分片完成
+
+        Args:
+            presigned_url: 预签名上传链接（来自 upload_prepare 返回的 parts）
+            part_data: 分片数据（字节）
+            upload_id: 上传任务 ID（来自 upload_prepare）
+            part_index: 分片索引（从 1 开始）
+            user_openid: 用户 openid（单聊时使用，与 group_openid 二选一）
+            group_openid: 群 openid（群聊时使用，与 user_openid 二选一）
+            retry_timeout: 重试超时时间（秒），当返回错误码 40093001 时持续重试
+
+        Returns:
+            bool: 是否上传成功
+
+        使用示例：
+            # 读取分片数据
+            with open("large_file.mp4", "rb") as f:
+                f.seek(offset)
+                chunk_data = f.read(block_size)
+
+            # 单聊场景 - 一行代码完成分片上传
+            await api.upload_part(
+                presigned_url=presigned_url,
+                part_data=chunk_data,
+                upload_id=upload_id,
+                part_index=1,
+                user_openid="user_xxx",
+            )
+
+            # 群聊场景
+            await api.upload_part(
+                presigned_url=presigned_url,
+                part_data=chunk_data,
+                upload_id=upload_id,
+                part_index=1,
+                group_openid="group_xxx",
+            )
+        """
+        # 1. 计算分片 MD5
+        chunk_md5 = hashlib.md5(part_data).hexdigest()
+
+        self._logger.debug(
+            f"开始上传分片: part_index={part_index}, size={len(part_data)}, md5={chunk_md5}"
+        )
+
+        # 2. PUT 到预签名 URL
+        # 对象存储需要正确的 Content-Type，二进制数据使用 application/octet-stream
+        headers = {"Content-Type": "application/octet-stream"}
+        async with aiohttp.ClientSession() as session:
+            async with session.put(
+                presigned_url, headers=headers, data=part_data
+            ) as resp:
+                resp.raise_for_status()
+
+        self._logger.debug(f"分片已上传到对象存储: part_index={part_index}")
+
+        # 3. 通知平台分片完成
+        return await self.upload_part_finish(
+            upload_id=upload_id,
+            part_index=part_index,
+            block_size=len(part_data),
+            md5=chunk_md5,
+            user_openid=user_openid,
+            group_openid=group_openid,
+            retry_timeout=retry_timeout,
+        )
+
+    async def upload_part_finish(
+        self,
+        upload_id: str,
+        part_index: int,
+        block_size: int,
+        md5: str,
+        user_openid: str | None = None,
+        group_openid: str | None = None,
+        retry_timeout: int | None = None,
+    ) -> bool:
+        """
+        完成分片上传（自动识别单聊/群聊）
+
+        每个分片上传到对象存储后，需要调用此接口通知平台。
+
+        Args:
+            upload_id: 上传任务 ID（来自 upload_prepare）
+            part_index: 分片索引（从 1 开始）
+            block_size: 本分片大小（字节）
+            md5: 本分片数据的 MD5（十六进制）
+            user_openid: 用户 openid（单聊时使用，与 group_openid 二选一）
+            group_openid: 群 openid（群聊时使用，与 user_openid 二选一）
+            retry_timeout: 重试超时时间（秒），当返回错误码 40093001 时持续重试
+
+        Returns:
+            bool: 是否完成成功
+
+        Raises:
+            APIError: 当返回错误码 40093001 时需要持续重试
+
+        使用示例：
+            # 上传分片到对象存储
+            chunk_data = file_data[offset:offset + block_size]
+            chunk_md5 = hashlib.md5(chunk_data).hexdigest()
+
+            # PUT 到预签名 URL
+            async with aiohttp.ClientSession() as session:
+                async with session.put(presigned_url, data=chunk_data) as resp:
+                    resp.raise_for_status()
+
+            # 单聊场景
+            await api.upload_part_finish(
+                upload_id=upload_id,
+                part_index=part_index,
+                block_size=len(chunk_data),
+                md5=chunk_md5,
+                user_openid="user_xxx",
+            )
+
+            # 群聊场景
+            await api.upload_part_finish(
+                upload_id=upload_id,
+                part_index=part_index,
+                block_size=len(chunk_data),
+                md5=chunk_md5,
+                group_openid="group_xxx",
+            )
+        """
+        if user_openid and group_openid:
+            raise ValueError("user_openid 和 group_openid 不能同时提供")
+
+        if not user_openid and not group_openid:
+            raise ValueError("user_openid 和 group_openid 必须提供其中之一")
+
+        http = await self._get_http()
+
+        if user_openid:
+            endpoint = f"/v2/users/{user_openid}/upload_part_finish"
+            target_type = "单聊"
+        else:
+            endpoint = f"/v2/groups/{group_openid}/upload_part_finish"
+            target_type = "群聊"
+
+        payload = {
+            "upload_id": upload_id,
+            "part_index": part_index,
+            "block_size": block_size,
+            "md5": md5,
+        }
+
+        max_retries = retry_timeout if retry_timeout else 60
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                await http.post(endpoint, json=payload)
+                self._logger.debug(
+                    f"分片完成通知成功: target_type={target_type}, upload_id={upload_id}, "
+                    f"part_index={part_index}"
+                )
+                return True
+            except APIError as e:
+                if e.code == 40093001:
+                    retry_count += 1
+                    self._logger.warning(
+                        f"分片上传处理中，等待重试: upload_id={upload_id}, "
+                        f"part_index={part_index}, retry={retry_count}/{max_retries}"
+                    )
+                    await asyncio.sleep(1)
+                else:
+                    raise
+            except Exception:
+                raise
+
+        raise Exception(f"分片上传超时: upload_id={upload_id}, part_index={part_index}")
+
+    async def upload_complete(
+        self,
+        upload_id: str,
+        user_openid: str | None = None,
+        group_openid: str | None = None,
+    ) -> Model.FileInfo:
+        """
+        完成大文件上传（自动识别单聊/群聊）
+
+        所有分片上传完成后，调用此接口获取 file_info。
+
+        Args:
+            upload_id: 上传任务 ID（来自 upload_prepare）
+            user_openid: 用户 openid（单聊时使用，与 group_openid 二选一）
+            group_openid: 群 openid（群聊时使用，与 user_openid 二选一）
+
+        Returns:
+            Model.FileInfo: 包含 file_uuid、file_info、ttl 字段的响应
+
+        使用示例：
+            # 单聊场景
+            result = await api.upload_complete(
+                upload_id=upload_id,
+                user_openid="user_xxx",
+            )
+
+            # 使用 file_info 发送消息
+            await api.send_c2c_message(
+                openid="user_xxx",
+                content="文件已上传",
+                media_file_info=result.file_info,
+            )
+
+            # 群聊场景
+            result = await api.upload_complete(
+                upload_id=upload_id,
+                group_openid="group_xxx",
+            )
+
+            # 使用 file_info 发送消息
+            await api.send_group_message(
+                group_openid="group_xxx",
+                content="文件已上传",
+                media_file_info=result.file_info,
+            )
+        """
+        if user_openid and group_openid:
+            raise ValueError("user_openid 和 group_openid 不能同时提供")
+
+        if not user_openid and not group_openid:
+            raise ValueError("user_openid 和 group_openid 必须提供其中之一")
+
+        http = await self._get_http()
+
+        if user_openid:
+            endpoint = f"/v2/users/{user_openid}/files"
+            target_id = user_openid
+            target_type = "单聊"
+        else:
+            endpoint = f"/v2/groups/{group_openid}/files"
+            target_id = group_openid
+            target_type = "群聊"
+
+        payload = {"upload_id": upload_id}
+
+        self._logger.debug(
+            f"完成大文件上传: target_type={target_type}, target_id={target_id}, "
+            f"upload_id={upload_id}"
+        )
+
+        data = await http.post(endpoint, json=payload)
+        response = Model.FileInfo.from_dict(data)
+
+        self._logger.debug(
+            f"大文件上传完成: upload_id={upload_id}, "
+            f"file_uuid={response.file_uuid}, ttl={response.ttl}"
+        )
+
+        return response
+
+    async def upload_large_file(
+        self,
+        file_path: str,
+        file_type: int,
+        user_openid: str | None = None,
+        group_openid: str | None = None,
+        concurrency: int | None = None,
+    ) -> Model.FileInfo:
+        """
+        上传大文件（自动分片）
+
+        这是一个高级封装方法，自动处理整个分片上传流程：
+        1. 计算文件哈希值
+        2. 申请上传
+        3. 并行上传分片到对象存储
+        4. 通知平台分片完成
+        5. 完成上传
+
+        Args:
+            file_path: 本地文件路径
+            file_type: 媒体类型（1 图片、2 视频、3 语音、4 文件）
+            user_openid: 用户 openid（单聊时使用，与 group_openid 二选一）
+            group_openid: 群 openid（群聊时使用，与 user_openid 二选一）
+            concurrency: 并发上传数，不指定时使用 API 返回的建议值
+
+        Returns:
+            Model.FileInfo: 包含 file_uuid、file_info、ttl 字段的响应
+
+        使用示例：
+            # 上传大文件到单聊
+            result = await api.upload_large_file(
+                file_path="./large_video.mp4",
+                file_type=2,  # 视频
+                user_openid="user_xxx",
+            )
+
+            # 使用 file_info 发送消息
+            await api.send_c2c_message(
+                openid="user_xxx",
+                content="大文件已上传",
+                media_file_info=result.file_info,
+            )
+
+            # 上传大文件到群聊
+            result = await api.upload_large_file(
+                file_path="./document.pdf",
+                file_type=4,  # 文件
+                group_openid="group_xxx",
+            )
+
+        注意:
+            - user_openid 和 group_openid 必须提供其中之一，不能同时提供
+            - 文件大小限制：图片 10MB、视频 100MB、语音 10MB、文件 100MB
+            - 建议对大文件（>10MB）使用此方法，小文件可使用 upload_media
+        """
+        if user_openid and group_openid:
+            raise ValueError("user_openid 和 group_openid 不能同时提供")
+
+        if not user_openid and not group_openid:
+            raise ValueError("user_openid 和 group_openid 必须提供其中之一")
+
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"文件不存在: {file_path}")
+
+        file_name = path.name
+        file_size = path.stat().st_size
+
+        self._logger.info(
+            f"开始上传大文件: file_name={file_name}, file_size={file_size}, "
+            f"file_type={file_type}"
+        )
+
+        # 1. 计算文件哈希值
+        self._logger.debug("计算文件哈希值...")
+
+        file_md5 = hashlib.md5()
+        file_sha1 = hashlib.sha1()
+        md5_10m = hashlib.md5()
+        md5_10m_size = 10002432
+        md5_10m_calculated = False
+
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(8192)
+                if not chunk:
+                    break
+                file_md5.update(chunk)
+                file_sha1.update(chunk)
+                if not md5_10m_calculated:
+                    md5_10m.update(chunk)
+                    if f.tell() >= md5_10m_size:
+                        md5_10m_calculated = True
+
+        file_md5_hex = file_md5.hexdigest()
+        file_sha1_hex = file_sha1.hexdigest()
+        md5_10m_hex = md5_10m.hexdigest()
+
+        self._logger.debug(
+            f"文件哈希计算完成: md5={file_md5_hex}, sha1={file_sha1_hex}"
+        )
+
+        # 2. 申请上传
+        prepare_response = await self.upload_prepare(
+            file_type=file_type,
+            file_name=file_name,
+            file_size=file_size,
+            md5=file_md5_hex,
+            sha1=file_sha1_hex,
+            md5_10m=md5_10m_hex,
+            user_openid=user_openid,
+            group_openid=group_openid,
+        )
+
+        upload_id = prepare_response.upload_id
+        block_size = prepare_response.block_size
+        parts = prepare_response.parts
+        max_concurrency = concurrency or prepare_response.concurrency or 3
+        retry_timeout = prepare_response.retry_timeout
+
+        self._logger.info(
+            f"分片上传申请成功: upload_id={upload_id}, "
+            f"block_size={block_size}, parts_count={len(parts)}, "
+            f"concurrency={max_concurrency}"
+        )
+
+        # 3. 并行上传分片
+        async def upload_single_part(part: Model.UploadPart) -> bool:
+            """上传单个分片"""
+            part_index = part.index
+            presigned_url = part.presigned_url
+
+            # 读取分片数据
+            offset = (part_index - 1) * block_size
+            with open(file_path, "rb") as f:
+                f.seek(offset)
+                chunk_data = f.read(block_size)
+
+            # 使用封装好的 upload_part 方法
+            return await self.upload_part(
+                presigned_url=presigned_url,
+                part_data=chunk_data,
+                upload_id=upload_id,
+                part_index=part_index,
+                user_openid=user_openid,
+                group_openid=group_openid,
+                retry_timeout=retry_timeout,
+            )
+
+        # 使用信号量控制并发数
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def upload_part_with_semaphore(part: Model.UploadPart) -> bool:
+            """带信号量控制的分片上传"""
+            async with semaphore:
+                self._logger.debug(
+                    f"开始上传分片: part_index={part.index}/{len(parts)}"
+                )
+                result = await upload_single_part(part)
+                self._logger.debug(
+                    f"分片上传完成: part_index={part.index}/{len(parts)}"
+                )
+                return result
+
+        # 并行上传所有分片
+        self._logger.info(
+            f"开始并行上传分片: parts_count={len(parts)}, "
+            f"concurrency={max_concurrency}"
+        )
+
+        upload_tasks = [upload_part_with_semaphore(part) for part in parts]
+        await asyncio.gather(*upload_tasks)
+
+        self._logger.info("所有分片上传完成")
+
+        # 4. 完成上传
+        result = await self.upload_complete(
+            upload_id=upload_id,
+            user_openid=user_openid,
+            group_openid=group_openid,
+        )
+
+        self._logger.info(
+            f"大文件上传完成: file_uuid={result.file_uuid}, ttl={result.ttl}"
+        )
+
+        return result
