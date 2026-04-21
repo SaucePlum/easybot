@@ -1058,6 +1058,57 @@ class MessageMedia(BaseModel):
 
 
 @dataclass
+class MessageScene(BaseModel):
+    """
+    消息场景对象
+
+    用于群聊和单聊消息中的场景信息,包含引用消息的扩展数据。
+    """
+
+    ext: list[str] = field(default_factory=list)
+    source: str = ""
+
+
+@dataclass
+class MessageElement(BaseModel):
+    """
+    消息元素对象
+
+    用于引用消息中包含的原始消息内容。
+    """
+
+    content: str = ""
+    msg_idx: str = ""
+    attachments: list[Attachment] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MessageElement":
+        if data is None:
+            return None
+
+        attachments_data = data.get("attachments", [])
+        attachments = [Attachment.from_dict(a) for a in attachments_data if a]
+
+        return cls(
+            content=data.get("content", ""),
+            msg_idx=data.get("msg_idx", ""),
+            attachments=attachments,
+            _raw_data=data,
+        )
+
+
+@dataclass
+class MessageReference(BaseModel):
+    """
+    消息引用对象
+
+    用于频道消息和私信消息中引用其他消息时的引用信息。
+    """
+
+    message_id: str = ""
+
+
+@dataclass
 class MessageBase(BaseModel):
     """
     消息基础模型
@@ -1118,6 +1169,8 @@ class GuildMessage(MessageBase):
     pinned: bool = False
     type: int = 0
     flags: int = 0
+    mentions: list[Author] = field(default_factory=list)
+    message_reference: MessageReference | None = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "GuildMessage":
@@ -1126,9 +1179,18 @@ class GuildMessage(MessageBase):
 
         kwargs = cls._process_common_fields(data)
 
-        # 处理特有字段
         member_data = data.get("member")
         kwargs["member"] = Member.from_dict(member_data) if member_data else None
+
+        mentions_data = data.get("mentions", [])
+        kwargs["mentions"] = [Author.from_dict(m) for m in mentions_data if m]
+
+        message_reference_data = data.get("message_reference")
+        kwargs["message_reference"] = (
+            MessageReference.from_dict(message_reference_data)
+            if message_reference_data
+            else None
+        )
 
         kwargs["channel_id"] = data.get("channel_id", "")
         kwargs["guild_id"] = data.get("guild_id", "")
@@ -1153,6 +1215,10 @@ class GroupMessage(MessageBase):
     """
 
     group_openid: str = ""
+    group_id: str = ""
+    message_scene: MessageScene | None = None
+    message_type: int = 0
+    msg_elements: list[MessageElement] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "GroupMessage":
@@ -1161,8 +1227,20 @@ class GroupMessage(MessageBase):
 
         kwargs = cls._process_common_fields(data)
 
-        # 处理特有字段
         kwargs["group_openid"] = data.get("group_openid", "")
+        kwargs["group_id"] = data.get("group_id", "")
+
+        message_scene_data = data.get("message_scene")
+        kwargs["message_scene"] = (
+            MessageScene.from_dict(message_scene_data) if message_scene_data else None
+        )
+
+        kwargs["message_type"] = data.get("message_type", 0)
+
+        msg_elements_data = data.get("msg_elements", [])
+        kwargs["msg_elements"] = [
+            MessageElement.from_dict(e) for e in msg_elements_data if e
+        ]
 
         return cls(**kwargs)
 
@@ -1175,12 +1253,29 @@ class C2CMessage(MessageBase):
     用于单聊场景的消息事件。
     """
 
+    message_scene: MessageScene | None = None
+    message_type: int = 0
+    msg_elements: list[MessageElement] = field(default_factory=list)
+
     @classmethod
     def from_dict(cls, data: dict) -> "C2CMessage":
         if data is None:
             return None
 
         kwargs = cls._process_common_fields(data)
+
+        message_scene_data = data.get("message_scene")
+        kwargs["message_scene"] = (
+            MessageScene.from_dict(message_scene_data) if message_scene_data else None
+        )
+
+        kwargs["message_type"] = data.get("message_type", 0)
+
+        msg_elements_data = data.get("msg_elements", [])
+        kwargs["msg_elements"] = [
+            MessageElement.from_dict(e) for e in msg_elements_data if e
+        ]
+
         return cls(**kwargs)
 
 
@@ -1195,6 +1290,9 @@ class DirectMessage(MessageBase):
     channel_id: str = ""
     guild_id: str = ""
     member: Member | None = None
+    direct_message: bool = False
+    message_reference: MessageReference | None = None
+    src_guild_id: str = ""
 
     @classmethod
     def from_dict(cls, data: dict) -> "DirectMessage":
@@ -1203,12 +1301,20 @@ class DirectMessage(MessageBase):
 
         kwargs = cls._process_common_fields(data)
 
-        # 处理特有字段
         member_data = data.get("member")
         kwargs["member"] = Member.from_dict(member_data) if member_data else None
 
+        message_reference_data = data.get("message_reference")
+        kwargs["message_reference"] = (
+            MessageReference.from_dict(message_reference_data)
+            if message_reference_data
+            else None
+        )
+
         kwargs["channel_id"] = data.get("channel_id", "")
         kwargs["guild_id"] = data.get("guild_id", "")
+        kwargs["direct_message"] = data.get("direct_message", False)
+        kwargs["src_guild_id"] = data.get("src_guild_id", "")
 
         return cls(**kwargs)
 

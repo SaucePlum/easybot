@@ -307,6 +307,8 @@ await msg.reply(
 | `author` | `Author \| None` | 作者结构 |
 | `member` | `Member \| None` | 成员结构 |
 | `attachments` | `list[Attachment]` | 附件结构 |
+| `mentions` | `list[Author]` | @用户列表 |
+| `message_reference` | `MessageReference \| None` | 引用消息结构 |
 | `seq` | `int \| None` | 消息序号 |
 | `seq_in_channel` | `str \| None` | 子频道内消息序号 |
 | `tts` | `bool` | 是否 TTS |
@@ -329,6 +331,12 @@ await msg.reply(
 | `voice_wav_url` | `str \| None` |
 | `asr_refer_text` | `str \| None` |
 
+结构：`MessageReference`
+
+| 字段名 | 类型 | 说明 |
+| --- | --- | --- |
+| `message_id` | `str` | 被引用的消息 ID |
+
 ### 5.2 `GroupMessage`
 
 来源装饰器：
@@ -340,12 +348,31 @@ await msg.reply(
 | 字段名 | 类型 | 说明 |
 | --- | --- | --- |
 | `group_openid` | `str` | 群 openid |
+| `group_id` | `str` | 群 ID |
 | `id` | `str` | 消息 ID |
 | `content` | `str` | 消息内容 |
 | `timestamp` | `str` | 消息时间 |
 | `author` | `Author \| None` | 作者结构 |
 | `attachments` | `list[Attachment]` | 附件结构 |
+| `message_scene` | `MessageScene \| None` | 消息场景结构 |
+| `message_type` | `int` | 消息类型（103 表示引用消息） |
+| `msg_elements` | `list[MessageElement]` | 消息元素列表（包含引用的消息内容） |
 | `treated_msg` | `str` | 处理后的消息 |
+
+结构：`MessageScene`
+
+| 字段名 | 类型 | 说明 |
+| --- | --- | --- |
+| `ext` | `list[str]` | 扩展信息列表 |
+| `source` | `str` | 来源 |
+
+结构：`MessageElement`
+
+| 字段名 | 类型 | 说明 |
+| --- | --- | --- |
+| `content` | `str` | 引用的消息内容 |
+| `msg_idx` | `str` | 消息索引 |
+| `attachments` | `list[Attachment]` | 附件列表（图片、视频等） |
 
 ### 5.3 `C2CMessage`
 
@@ -355,7 +382,17 @@ await msg.reply(
 - `@bot.on_command(..., valid_scenes=CommandValidScenes.C2C)`
 - `@bot.before_command(..., valid_scenes=CommandValidScenes.C2C)`
 
-`C2CMessage` 直接继承 `MessageBase`，不新增字段。
+| 字段名 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | `str` | 消息 ID |
+| `content` | `str` | 消息内容 |
+| `timestamp` | `str` | 消息时间 |
+| `author` | `Author \| None` | 作者结构 |
+| `attachments` | `list[Attachment]` | 附件结构 |
+| `message_scene` | `MessageScene \| None` | 消息场景结构 |
+| `message_type` | `int` | 消息类型（103 表示引用消息） |
+| `msg_elements` | `list[MessageElement]` | 消息元素列表（包含引用的消息内容） |
+| `treated_msg` | `str` | 处理后的消息 |
 
 ### 5.4 `DirectMessage`
 
@@ -370,6 +407,9 @@ await msg.reply(
 | `channel_id` | `str` | 私信子频道 ID |
 | `guild_id` | `str` | 私信频道 ID |
 | `member` | `Member \| None` | 成员结构 |
+| `direct_message` | `bool` | 是否为私信标志 |
+| `message_reference` | `MessageReference \| None` | 消息引用结构 |
+| `src_guild_id` | `str` | 源频道 ID |
 | `id` | `str` | 消息 ID |
 | `content` | `str` | 消息内容 |
 | `timestamp` | `str` | 消息时间 |

@@ -144,3 +144,10 @@ twine upload dist/*
 ### 版本号更新
 
 修改 `easybot/version.py` 中的 `__version__` 变量。
+
+
+### skills打包指令
+
+```bash
+tar -cvf easybot-assistant.skill -C .trae/skills easybot-assistant
+```

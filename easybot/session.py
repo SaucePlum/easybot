@@ -317,6 +317,10 @@ class BoundSession:
         这是一个异步方法，会阻塞当前协程直到收到匹配的消息。
         常用于实现多轮对话、表单填写等需要用户连续输入的场景。
 
+        注意：当收到新消息时，会自动更新绑定对象的 msg_id，
+        这样后续使用 msg.reply() 时会使用最新的 msg_id，
+        避免触发官方的"每个 msg_id 最多回复 5 次"限制。
+
         Args:
             scopes: 等待的作用域，可以是单个或多个。只有来自匹配作用域的消息才会被处理
             command: 命令匹配规则，支持多种类型：
@@ -352,9 +356,29 @@ class BoundSession:
             cmd = BotCommandObject(command="确认", admin=True)
             reply = await session.wait_for(Scope.USER, cmd, timeout=60)
         """
-        return await self._manager.wait_for(
+        result = await self._manager.wait_for(
             scopes, command, timeout, predicate, on_timeout
         )
+        self._update_bound_obj_msg_id(result)
+        return result
+
+    def _update_bound_obj_msg_id(self, new_msg: Model.Message) -> None:
+        """
+        更新绑定对象的 msg_id
+
+        当 wait_for 返回新消息时，自动更新绑定对象的 _reply_strategy 中的
+        _msg_id 和 _event_id，这样后续使用 msg.reply() 时会使用最新的 msg_id。
+
+        这解决了官方"每个 msg_id 最多回复 5 次"的限制问题。
+
+        Args:
+            new_msg: 新收到的消息对象
+        """
+        if self._obj._reply_strategy is None or new_msg._reply_strategy is None:
+            return
+
+        self._obj._reply_strategy._msg_id = new_msg._reply_strategy._msg_id
+        self._obj._reply_strategy._event_id = new_msg._reply_strategy._event_id
 
 
 class SessionManager:
@@ -445,35 +469,11 @@ class SessionManager:
         避免用户 get() 到本该过期的会话，或重复发送 timeout_reply。
         """
         current_time = time()
-        cleaned_count = 0
-
-        async with self._sessions_lock:
-            for scope, scope_sessions in self._sessions.items():
-                if scope == Scope.GLOBAL:
-                    keys_to_delete = []
-                    for key, session in scope_sessions.items():
-                        if self._is_session_expired(session, current_time):
-                            keys_to_delete.append(key)
-                    for key in keys_to_delete:
-                        del scope_sessions[key]
-                        cleaned_count += 1
-                else:
-                    identify_to_delete = []
-                    for identify, identify_sessions in list(scope_sessions.items()):
-                        keys_to_delete = []
-                        for key, session in list(identify_sessions.items()):
-                            if self._is_session_expired(session, current_time):
-                                keys_to_delete.append(key)
-                        for key in keys_to_delete:
-                            del identify_sessions[key]
-                            cleaned_count += 1
-                        if not identify_sessions:
-                            identify_to_delete.append(identify)
-                    for identify in identify_to_delete:
-                        del scope_sessions[identify]
-
-        if cleaned_count > 0:
-            self._logger.info(f"启动时清理了 {cleaned_count} 个过期会话")
+        removed_count = await self._remove_sessions_if(
+            lambda session: self._is_session_expired(session, current_time)
+        )
+        if removed_count > 0:
+            self._logger.info(f"启动时清理了 {removed_count} 个过期会话")
             await self.commit_data(is_info=False)
 
     def _is_session_expired(self, session: _SessionObject, current_time: float) -> bool:
@@ -508,6 +508,72 @@ class SessionManager:
                 else:
                     return True
         return False
+
+    async def _iterate_sessions(
+        self, callback: Callable[[_SessionObject], None]
+    ) -> None:
+        """
+        遍历所有会话并对每个会话执行回调
+
+        在锁保护下遍历 _sessions 字典，对每个会话对象调用 callback。
+        自动处理 GLOBAL 和非 GLOBAL 作用域的字典结构差异。
+
+        Args:
+            callback: 对每个会话对象执行的回调函数
+        """
+        async with self._sessions_lock:
+            for scope, scope_sessions in self._sessions.items():
+                if scope == Scope.GLOBAL:
+                    for key, session in scope_sessions.items():
+                        callback(session)
+                else:
+                    for identify, identify_sessions in scope_sessions.items():
+                        for key, session in identify_sessions.items():
+                            callback(session)
+
+    async def _remove_sessions_if(
+        self, predicate: Callable[[_SessionObject], bool]
+    ) -> int:
+        """
+        删除所有满足条件的会话
+
+        在锁保护下遍历 _sessions 字典，删除所有满足 predicate 的会话。
+        同时清理因会话删除而变空的 identify 字典，保持数据结构整洁。
+
+        Args:
+            predicate: 判断会话是否应被删除的谓词函数
+
+        Returns:
+            int: 被删除的会话数量
+        """
+        removed_count = 0
+        async with self._sessions_lock:
+            for scope, scope_sessions in self._sessions.items():
+                if scope == Scope.GLOBAL:
+                    keys_to_delete = [
+                        key
+                        for key, session in scope_sessions.items()
+                        if predicate(session)
+                    ]
+                    for key in keys_to_delete:
+                        del scope_sessions[key]
+                        removed_count += 1
+                else:
+                    identify_to_delete = []
+                    for identify, identify_sessions in scope_sessions.items():
+                        keys_to_delete = [
+                            key
+                            for key, session in identify_sessions.items()
+                            if predicate(session)
+                        ]
+                        for key in keys_to_delete:
+                            del identify_sessions[key]
+                            removed_count += 1
+                        if not identify_sessions:
+                            identify_to_delete.append(identify)
+                    for identify in identify_to_delete:
+                        del scope_sessions[identify]
+        return removed_count
 
     async def commit_data(self, is_info: bool = True):
         """
@@ -659,17 +725,7 @@ class SessionManager:
         遍历所有作用域的所有会话，检查是否超时。
         使用锁保护迭代过程，防止其他协程在遍历期间修改字典。
         """
-        current_time = time()
-
-        async with self._sessions_lock:
-            for scope, scope_sessions in self._sessions.items():
-                if scope == Scope.GLOBAL:
-                    for key, session in scope_sessions.items():
-                        self._handle_session_timeout(session)
-                else:
-                    for identify, identify_sessions in scope_sessions.items():
-                        for key, session in identify_sessions.items():
-                            self._handle_session_timeout(session)
+        await self._iterate_sessions(self._handle_session_timeout)
 
     def _handle_session_timeout(self, session: _SessionObject):
         """
@@ -825,43 +881,15 @@ class SessionManager:
         清理完成后如果 is_auto_commit=True 会自动持久化。
         """
         current_time = time()
-        deleted_count = 0
-
-        async with self._sessions_lock:
-            for scope, scope_sessions in self._sessions.items():
-                if scope == Scope.GLOBAL:
-                    keys_to_delete = []
-                    for key, session in scope_sessions.items():
-                        if session.status == SessionStatus.INACTIVE:
-                            if (
-                                session.gc_timeout_stamp
-                                and current_time > session.gc_timeout_stamp
-                            ):
-                                keys_to_delete.append(key)
-                    for key in keys_to_delete:
-                        del scope_sessions[key]
-                        deleted_count += 1
-                else:
-                    identify_to_delete = []
-                    for identify, identify_sessions in scope_sessions.items():
-                        keys_to_delete = []
-                        for key, session in identify_sessions.items():
-                            if session.status == SessionStatus.INACTIVE:
-                                if (
-                                    session.gc_timeout_stamp
-                                    and current_time > session.gc_timeout_stamp
-                                ):
-                                    keys_to_delete.append(key)
-                        for key in keys_to_delete:
-                            del identify_sessions[key]
-                            deleted_count += 1
-                        if not identify_sessions:
-                            identify_to_delete.append(identify)
-                    for identify in identify_to_delete:
-                        del scope_sessions[identify]
-
-        if deleted_count > 0:
-            self._logger.debug(f"GC清理完成：删除了 {deleted_count} 个过期会话")
+        removed_count = await self._remove_sessions_if(
+            lambda session: (
+                session.status == SessionStatus.INACTIVE
+                and session.gc_timeout_stamp
+                and current_time > session.gc_timeout_stamp
+            )
+        )
+        if removed_count > 0:
+            self._logger.debug(f"GC清理完成：删除了 {removed_count} 个过期会话")
 
         if self._is_auto_commit:
             await self.commit_data(is_info=False)
@@ -1165,8 +1193,8 @@ class SessionManager:
         """
         等待指定的命令被触发
 
-        这是一个阻塞式异步方法，会持续轮询直到收到匹配的消息或超时。
-        轮询间隔为 0.5 秒，在大多数场景下响应足够及时。
+        这是一个异步方法，使用 asyncio.Future 实现事件驱动机制。
+        当收到匹配的消息时，会立即唤醒等待者，无轮询延迟。
 
         Args:
             scopes: 作用域或作用域列表，只有来自匹配作用域的消息才会被处理

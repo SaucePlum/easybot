@@ -92,7 +92,11 @@ class BaseWebSocketClient(ABC):
                 enable_cleanup_closed=True,
                 keepalive_timeout=10,
             )
-            self._session = aiohttp.ClientSession(timeout=timeout, connector=connector)
+            self._session = aiohttp.ClientSession(
+                timeout=timeout,
+                connector=connector,
+                trust_env=False,
+            )
         return self._session
 
     def _dispatch_event(

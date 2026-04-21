@@ -2371,7 +2371,7 @@ class API:
         # 2. PUT 到预签名 URL
         # 对象存储需要正确的 Content-Type，二进制数据使用 application/octet-stream
         headers = {"Content-Type": "application/octet-stream"}
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(trust_env=False) as session:
             async with session.put(
                 presigned_url, headers=headers, data=part_data
             ) as resp:

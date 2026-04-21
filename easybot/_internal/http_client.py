@@ -278,6 +278,7 @@ class HTTPClient:
                 timeout=timeout,
                 connector=connector,
                 connector_owner=False,
+                trust_env=False,
             )
         return self._session
 
