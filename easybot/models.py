@@ -160,10 +160,10 @@ class BaseModel:
         从字典创建模型实例
 
         Args:
-            data: 原始数据字典
+            data: 原始数据字典或None
 
         Returns:
-            模型实例
+            模型实例或None（当data为None时）
         """
         if data is None:
             return None
