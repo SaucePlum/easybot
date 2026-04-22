@@ -155,7 +155,7 @@ class BaseModel:
         return _field_info_cache[cls]
 
     @classmethod
-    def from_dict(cls: type[T], data: dict) -> T:
+    def from_dict(cls: type[T], data: dict | None) -> T | None:
         """
         从字典创建模型实例
 
@@ -389,7 +389,7 @@ class Member(BaseModel):
     joined_at: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Member":
+    def from_dict(cls, data: dict | None) -> "Member | None":
         if data is None:
             return None
 
@@ -417,7 +417,7 @@ class MemberWithGuildID(Member):
     op_user_id: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MemberWithGuildID":
+    def from_dict(cls, data: dict | None) -> "MemberWithGuildID | None":
         if data is None:
             return None
 
@@ -504,7 +504,7 @@ class Thread(BaseModel):
     thread_info: "ThreadInfo | None" = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Thread":
+    def from_dict(cls, data: dict | None) -> "Thread | None":
         if data is None:
             return None
 
@@ -534,7 +534,7 @@ class ThreadListResult(BaseModel):
     is_finish: int = 0
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadListResult":
+    def from_dict(cls, data: dict | None) -> "ThreadListResult | None":
         if data is None:
             return None
 
@@ -559,7 +559,7 @@ class ThreadDetail(BaseModel):
     thread: "Thread | None" = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadDetail":
+    def from_dict(cls, data: dict | None) -> "ThreadDetail | None":
         if data is None:
             return None
 
@@ -664,7 +664,7 @@ class AtInfo(BaseModel):
     TYPE_GUILD: ClassVar[int] = 3
 
     @classmethod
-    def from_dict(cls, data: dict) -> "AtInfo":
+    def from_dict(cls, data: dict | None) -> "AtInfo | None":
         if data is None:
             return None
 
@@ -748,7 +748,7 @@ class RichText(BaseModel):
     TYPE_IMAGE: ClassVar[int] = 11
 
     @classmethod
-    def from_dict(cls, data: dict) -> "RichText":
+    def from_dict(cls, data: dict | None) -> "RichText | None":
         if data is None:
             return None
 
@@ -816,7 +816,7 @@ class ThreadContentText(BaseModel):
     props: TextProps | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadContentText":
+    def from_dict(cls, data: dict | None) -> "ThreadContentText | None":
         if data is None:
             return None
 
@@ -884,7 +884,7 @@ class ThreadContentPlatVideo(BaseModel):
     cover: "ThreadContentPlatImage | None" = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadContentPlatVideo":
+    def from_dict(cls, data: dict | None) -> "ThreadContentPlatVideo | None":
         if data is None:
             return None
 
@@ -914,7 +914,7 @@ class ThreadContentVideo(BaseModel):
     plat_video: "ThreadContentPlatVideo | None" = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadContentVideo":
+    def from_dict(cls, data: dict | None) -> "ThreadContentVideo | None":
         if data is None:
             return None
 
@@ -952,7 +952,7 @@ class ThreadContentElem(BaseModel):
     TYPE_URL: ClassVar[int] = 4
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadContentElem":
+    def from_dict(cls, data: dict | None) -> "ThreadContentElem | None":
         if data is None:
             return None
 
@@ -990,7 +990,7 @@ class ThreadContentParagraph(BaseModel):
     props: ParagraphProps | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadContentParagraph":
+    def from_dict(cls, data: dict | None) -> "ThreadContentParagraph | None":
         if data is None:
             return None
 
@@ -1018,7 +1018,7 @@ class ThreadContent(BaseModel):
     paragraphs: list["ThreadContentParagraph"] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ThreadContent":
+    def from_dict(cls, data: dict | None) -> "ThreadContent | None":
         if data is None:
             return None
 
@@ -1082,7 +1082,7 @@ class MessageElement(BaseModel):
     attachments: list[Attachment] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MessageElement":
+    def from_dict(cls, data: dict | None) -> "MessageElement | None":
         if data is None:
             return None
 
@@ -1173,7 +1173,7 @@ class GuildMessage(MessageBase):
     message_reference: MessageReference | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GuildMessage":
+    def from_dict(cls, data: dict | None) -> "GuildMessage | None":
         if data is None:
             return None
 
@@ -1221,7 +1221,7 @@ class GroupMessage(MessageBase):
     msg_elements: list[MessageElement] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GroupMessage":
+    def from_dict(cls, data: dict | None) -> "GroupMessage | None":
         if data is None:
             return None
 
@@ -1258,7 +1258,7 @@ class C2CMessage(MessageBase):
     msg_elements: list[MessageElement] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "C2CMessage":
+    def from_dict(cls, data: dict | None) -> "C2CMessage | None":
         if data is None:
             return None
 
@@ -1295,7 +1295,7 @@ class DirectMessage(MessageBase):
     src_guild_id: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "DirectMessage":
+    def from_dict(cls, data: dict | None) -> "DirectMessage | None":
         if data is None:
             return None
 
@@ -1332,7 +1332,7 @@ class MessageDelete(BaseModel):
     op_user: Author | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MessageDelete":
+    def from_dict(cls, data: dict | None) -> "MessageDelete | None":
         if data is None:
             return None
 
@@ -1409,7 +1409,7 @@ class MessageReaction(BaseModel):
     emoji: Emoji | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "MessageReaction":
+    def from_dict(cls, data: dict | None) -> "MessageReaction | None":
         if data is None:
             return None
 
@@ -1474,7 +1474,7 @@ class PostInfo(BaseModel):
     date_time: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "PostInfo":
+    def from_dict(cls, data: dict | None) -> "PostInfo | None":
         if data is None:
             return None
 
@@ -1504,7 +1504,7 @@ class Post(BaseModel):
     post_info: PostInfo | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Post":
+    def from_dict(cls, data: dict | None) -> "Post | None":
         if data is None:
             return None
 
@@ -1535,7 +1535,7 @@ class ReplyInfo(BaseModel):
     date_time: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ReplyInfo":
+    def from_dict(cls, data: dict | None) -> "ReplyInfo | None":
         if data is None:
             return None
 
@@ -1566,7 +1566,7 @@ class Reply(BaseModel):
     reply_info: ReplyInfo | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Reply":
+    def from_dict(cls, data: dict | None) -> "Reply | None":
         if data is None:
             return None
 
@@ -1664,7 +1664,7 @@ class InteractionData(BaseModel):
     resolved: InteractionDataResolved | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "InteractionData":
+    def from_dict(cls, data: dict | None) -> "InteractionData | None":
         if data is None:
             return None
 
@@ -1713,7 +1713,7 @@ class Interaction(BaseModel):
     CHAT_TYPE_C2C: ClassVar[int] = 2
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Interaction":
+    def from_dict(cls, data: dict | None) -> "Interaction | None":
         if data is None:
             return None
 
@@ -1783,7 +1783,7 @@ class Payload(BaseModel):
     t: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Payload":
+    def from_dict(cls, data: dict | None) -> "Payload | None":
         if data is None:
             return None
         return cls(
@@ -1885,7 +1885,7 @@ class Announces(BaseModel):
     recommend_channels: list[RecommendChannel] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Announces":
+    def from_dict(cls, data: dict | None) -> "Announces | None":
         if data is None:
             return None
 
@@ -1922,7 +1922,7 @@ class Schedule(BaseModel):
     remind_type: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "Schedule":
+    def from_dict(cls, data: dict | None) -> "Schedule | None":
         if data is None:
             return None
 
@@ -1975,7 +1975,7 @@ class ReactionUsers(BaseModel):
     is_end: bool = False
 
     @classmethod
-    def from_dict(cls, data: dict) -> "ReactionUsers":
+    def from_dict(cls, data: dict | None) -> "ReactionUsers | None":
         if data is None:
             return None
 
@@ -2032,7 +2032,7 @@ class UploadPrepareResponse(BaseModel):
     retry_timeout: int | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "UploadPrepareResponse":
+    def from_dict(cls, data: dict | None) -> "UploadPrepareResponse | None":
         if data is None:
             return None
 
@@ -2090,7 +2090,7 @@ class APIPermissionDemand(BaseModel):
     desc: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "APIPermissionDemand":
+    def from_dict(cls, data: dict | None) -> "APIPermissionDemand | None":
         if data is None:
             return None
 
@@ -2151,7 +2151,7 @@ class GatewayBotResponse(BaseModel):
     session_start_limit: SessionStartLimit | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GatewayBotResponse":
+    def from_dict(cls, data: dict | None) -> "GatewayBotResponse | None":
         if data is None:
             return None
 
@@ -2183,7 +2183,7 @@ class GuildRolesResponse(BaseModel):
     role_num_limit: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GuildRolesResponse":
+    def from_dict(cls, data: dict | None) -> "GuildRolesResponse | None":
         if data is None:
             return None
 
@@ -2210,7 +2210,7 @@ class CreateRoleResponse(BaseModel):
     role: Role | None = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CreateRoleResponse":
+    def from_dict(cls, data: dict | None) -> "CreateRoleResponse | None":
         if data is None:
             return None
 
@@ -2237,7 +2237,7 @@ class RoleMembersResponse(BaseModel):
     next: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict) -> "RoleMembersResponse":
+    def from_dict(cls, data: dict | None) -> "RoleMembersResponse | None":
         if data is None:
             return None
 
@@ -2327,7 +2327,7 @@ class APIPermissionListResponse(BaseModel):
     apis: list[APIPermission] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict) -> "APIPermissionListResponse":
+    def from_dict(cls, data: dict | None) -> "APIPermissionListResponse | None":
         if data is None:
             return None
 
