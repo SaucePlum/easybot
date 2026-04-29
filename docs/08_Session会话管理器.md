@@ -383,11 +383,12 @@ session_obj = await session.new(
     key="my_session",
     data={"step": "waiting_input"},
     # 可选参数:
-    identify=None,          # 手动指定标识
-    is_replace=True,        # 已存在时是否替换
-    timeout=None,           # 超时时间(秒)
-    timeout_reply=None,     # 超时时自动发送的消息
-    inactive_gc_timeout=0,  # 变为 INACTIVE 后多久被 GC 回收(秒)
+    identify=None,                    # 手动指定标识
+    is_replace=True,                  # 已存在时是否替换
+    timeout=None,                     # 超时时间(秒)，默认 1800
+    timeout_reply=None,               # 超时时自动发送的消息
+    inactive_gc_timeout=0,            # 变为 INACTIVE 后多久被 GC 回收(秒)
+    send_reply_on_msg_id_expired=False,  # msg_id 过期后是否仍发送
 )
 ```
 
@@ -397,12 +398,13 @@ session_obj = await session.new(
 |------|------|------|--------|------|
 | `scope` | `str` | ✅ | — | 作用域 |
 | `key` | `Hashable` | ✅ | — | 会话唯一键 |
-| `data` | `dict \| None` | ❌ | `{}` | 初始会话数据 |
+| `data` | `dict \| None` | ❌ | `None` | 初始会话数据 |
 | `identify` | `Hashable \| None` | ❌ | `None` | 手动指定标识 |
 | `is_replace` | `bool` | ❌ | `True` | 已存在同 key 会话时是否替换 |
-| `timeout` | `float \| None` | ❌ | `1800` | 超时时间（秒），默认 30 分钟 |
+| `timeout` | `float \| None` | ❌ | `None` | 超时时间（秒），默认 30 分钟 |
 | `timeout_reply` | `str \| Message \| ... \| None` | ❌ | `None` | 超时后自动发送的回复 |
-| `inactive_gc_timeout` | `float` | ❌ | `0` | 非活跃会话的 GC 回收等待时间 |
+| `inactive_gc_timeout` | `float \| None` | ❌ | `0` | 非活跃会话的 GC 回收等待时间 |
+| `send_reply_on_msg_id_expired` | `bool` | ❌ | `False` | msg_id 过期后是否仍发送消息（消耗主动消息配额） |
 
 **返回值**: `SessionObject`
 
@@ -425,6 +427,7 @@ session_obj = await session.get(
 | `key` | `Hashable` | ✅ | — | 会话键 |
 | `identify` | `Hashable \| None` | ❌ | `None` | 手动指定标识 |
 | `default` | `Any` | ❌ | `None` | 会话不存在时的返回值 |
+| `skip_update_last_op` | `bool` | ❌ | `False` | 为 `True` 时跳过更新最后操作时间（用于窥视会话） |
 
 **返回值**: `SessionObject` — 存在时返回会话对象；不存在或已过期返回 `default`
 
@@ -495,7 +498,7 @@ result_msg = await session.wait_for(
 | `command` | `BotCommandObject \| str \| Sequence[str] \| Pattern \| None` | ❌ | 要等待的命令 |
 | `timeout` | `int \| None` | ❌ | 超时时间（秒），None 表示永远等待 |
 | `predicate` | `Callable[[Any], bool] \| None` | ❌ | 自定义谓词函数 |
-| `on_timeout` | `Callable[[], Any] \| None` | ❌ | 超时回调函数 |
+| `on_timeout` | `Callable[[], None] \| None` | ❌ | 超时回调函数 |
 
 **返回值**: 消息对象（`GuildMessage` / `GroupMessage` / `C2CMessage` / `DirectMessage`）
 

@@ -513,6 +513,19 @@ await msg.reply(
 | `user_id` | `str` |
 | `message_id` | `str` |
 
+Interaction 内置 ClassVar 常量：
+
+| 常量 | 值 | 说明 |
+| --- | --- | --- |
+| `TYPE_BUTTON` | `11` | 按钮类型互动 |
+| `TYPE_MENU` | `12` | 菜单类型互动 |
+| `SCENE_C2C` | `"c2c"` | 单聊场景 |
+| `SCENE_GROUP` | `"group"` | 群聊场景 |
+| `SCENE_GUILD` | `"guild"` | 频道场景 |
+| `CHAT_TYPE_GUILD` | `0` | 频道会话类型 |
+| `CHAT_TYPE_GROUP` | `1` | 群聊会话类型 |
+| `CHAT_TYPE_C2C` | `2` | 单聊会话类型 |
+
 ***
 
 ## 六、群聊与好友事件
@@ -1055,17 +1068,16 @@ Model.Message = Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Mod
 | `ALIGNMENT_MIDDLE` | `1` |
 | `ALIGNMENT_RIGHT` | `2` |
 
-### 11.3 `SessionStatus`
+### 11.4 `SessionStatus`
 
 `SessionStatus` 是会话管理器使用的状态常量类，主要用于 `SessionObject.status` 以及 `SessionManager` 的状态流转。
 
-| 常量 | 说明 |
-| --- | --- |
-| `ACTIVE` | 会按规则检查并在满足条件时自动清理 |
-| `INACTIVE` | 会话当前处于等待或挂起前的非活跃状态 |
-| `HANGING` | 不检查 timeout，下次操作时再恢复为活跃路径 |
+| 常量 | 值 | 说明 |
+| --- | --- | --- |
+| `ACTIVE` | `0` | 活跃状态，会按规则检查并在满足条件时自动清理 |
+| `INACTIVE` | `1` | 非活跃状态，超时后进入此状态，GC 在指定时间后清理 |
 
-### 11.4 `StreamMessageResponse`
+### 11.5 `StreamMessageResponse`
 
 `StreamMessageResponse` 是发送流式消息时的返回模型，适用于 `send_c2c_stream_message()`。
 
@@ -1077,7 +1089,7 @@ Model.Message = Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Mod
 | `timestamp` | `str \| None` |
 | `ext_info` | `dict \| None` |
 
-### 11.5 `StreamInputMode`
+### 11.6 `StreamInputMode`
 
 `StreamInputMode` 是流式消息输入模式常量类。
 
@@ -1085,7 +1097,7 @@ Model.Message = Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Mod
 | --- | --- |
 | `REPLACE` | `"replace"` |
 
-### 11.6 `StreamInputState`
+### 11.7 `StreamInputState`
 
 `StreamInputState` 是流式消息输入状态常量类。
 
@@ -1094,7 +1106,7 @@ Model.Message = Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Mod
 | `GENERATING` | `1` |
 | `DONE` | `10` |
 
-### 11.7 `StreamContentType`
+### 11.8 `StreamContentType`
 
 `StreamContentType` 是流式消息内容类型常量类。
 
@@ -1104,7 +1116,7 @@ Model.Message = Model.GuildMessage | Model.GroupMessage | Model.C2CMessage | Mod
 
 ***
 
-### 11.8 大文件分片上传相关模型
+### 11.9 大文件分片上传相关模型
 
 #### `UploadPart`
 

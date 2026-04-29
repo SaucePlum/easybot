@@ -382,6 +382,11 @@ await bot.api.upload_media(
 - 不能替代频道消息里的 `image` / `file_image`
 - 当 `file_type=4`（文件类型）时，**必须提供 `file_name` 参数**且需包含扩展名
 
+**参数互斥约束**：
+- `url` 和 `file_data` **必须提供其中之一**
+- `user_openid` 和 `group_openid` **必须提供其中之一**，**不能同时提供**
+- 违反以上约束将抛出 `ValueError`
+
 ### 2.5 频道私信
 
 #### 创建私信会话
@@ -976,9 +981,14 @@ await bot.api.create_thread(
     channel_id: str,                           # 子频道 ID
     title: str,                               # 帖子标题
     content: str | Model.ThreadContent,       # 帖子内容
-    format: int | None = None,                # 帖子格式
+    format: int | None = None,                # 帖子格式（1=纯文本, 2=HTML, 3=Markdown, 4=JSON）
 ) -> Model.CreateThreadResponse
 ```
+
+**`format` 自动推断规则**：
+- 当 `content` 为 `str` 且未指定 `format` 时，自动使用 `format=3`（Markdown）
+- 当 `content` 为 `str` 且显式指定 `format` 时，使用传入值
+- 当 `content` 为 `Model.ThreadContent` 时，自动强制使用 `format=4`（JSON），忽略传入值
 
 #### 删除帖子
 
@@ -1044,6 +1054,16 @@ await bot.api.respond_interaction(
 ## 十四、大文件分片上传 API
 
 大文件分片上传支持上传超过 10MB 的文件，适用于视频、大文档等场景。
+
+### 14.1 概述
+
+| 方法 | 类型 | 说明 |
+|------|------|------|
+| `upload_large_file()` | 封装 | 一键上传大文件 |
+| `upload_prepare()` | 官方 | 申请上传任务 |
+| `upload_part()` | 封装 | 上传单个分片 |
+| `upload_part_finish()` | 官方 | 完成分片通知 |
+| `upload_complete()` | 官方 | 完成上传 |
 
 ### 14.2 一键上传（推荐）
 
@@ -1178,17 +1198,7 @@ tasks = [upload_single_part(part) for part in prepare.parts]
 await asyncio.gather(*tasks)
 ```
 
-### 14.5 API 方法列表
-
-| 方法 | 类型 | 说明 |
-|------|------|------|
-| `upload_large_file()` | 封装 | 一键上传大文件 |
-| `upload_prepare()` | 官方 | 申请上传任务 |
-| `upload_part()` | 封装 | 上传单个分片 |
-| `upload_part_finish()` | 官方 | 完成分片通知 |
-| `upload_complete()` | 官方 | 完成上传 |
-
-### 14.6 注意事项
+### 14.5 注意事项
 
 1. **文件名限制**：文件名不能包含敏感关键词（如 `url`、`http`、`www` 等）
 2. **场景选择**：`user_openid` 和 `group_openid` 必须提供其中之一
