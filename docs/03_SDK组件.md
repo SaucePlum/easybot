@@ -337,7 +337,8 @@ sandbox.check_user("user_id", is_sandbox=True, is_qq=False)
 
 | 装饰器 | 事件类型 | Callback 类型 | 说明 |
 |--------|---------|--------------|------|
-| `@bot.on_group_message` | `GROUP_AT_MESSAGE_CREATE` | `Model.GroupMessage` | 群聊 @机器人消息 |
+| `@bot.on_at_group_message` | `GROUP_AT_MESSAGE_CREATE` | `Model.GroupMessage` | 群聊 @机器人消息 |
+| `@bot.on_group_message` | `GROUP_MESSAGE_CREATE` | `Model.GroupMessage` | 全量群聊消息 |
 | `@bot.on_c2c_message` | `C2C_MESSAGE_CREATE` | `Model.C2CMessage` | QQ 单聊消息 |
 | `@bot.on_direct_message` | `DIRECT_MESSAGE_CREATE` | `Model.DirectMessage` | 频道私信消息 |
 

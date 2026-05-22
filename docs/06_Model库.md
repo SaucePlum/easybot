@@ -77,7 +77,7 @@ async def handle(msg: Model.GroupMessage):
 | 场景 | 主要装饰器 | callback 类型 |
 | --- | --- | --- |
 | 频道消息 | `@bot.on_guild_message` / `@bot.on_guild_full_message` | `Model.GuildMessage` |
-| 群聊消息 | `@bot.on_group_message` | `Model.GroupMessage` |
+| 群聊消息 | `@bot.on_at_group_message` / `@bot.on_group_message` | `Model.GroupMessage` |
 | 单聊消息 | `@bot.on_c2c_message` | `Model.C2CMessage` |
 | 频道私信 | `@bot.on_direct_message` | `Model.DirectMessage` |
 | 消息删除 | `@bot.on_message_delete` / `@bot.on_public_message_delete` / `@bot.on_direct_message_delete` | `Model.MessageDelete` |
@@ -341,6 +341,7 @@ await msg.reply(
 
 来源装饰器：
 
+- `@bot.on_at_group_message`
 - `@bot.on_group_message`
 - `@bot.on_command(..., valid_scenes=CommandValidScenes.GROUP)`
 - `@bot.before_command(..., valid_scenes=CommandValidScenes.GROUP)`
@@ -964,6 +965,7 @@ async def handle(event: Model.BaseModel):
 | --- | --- |
 | `@bot.on_guild_message` | `Model.GuildMessage` |
 | `@bot.on_guild_full_message` | `Model.GuildMessage` |
+| `@bot.on_at_group_message` | `Model.GroupMessage` |
 | `@bot.on_group_message` | `Model.GroupMessage` |
 | `@bot.on_c2c_message` | `Model.C2CMessage` |
 | `@bot.on_direct_message` | `Model.DirectMessage` |

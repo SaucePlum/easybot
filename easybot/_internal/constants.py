@@ -67,6 +67,7 @@ GUILD_EVENTS: set[str] = {
 
 GROUP_EVENTS: set[str] = {
     "GROUP_AT_MESSAGE_CREATE",
+    "GROUP_MESSAGE_CREATE",
     "GROUP_ADD_ROBOT",
     "GROUP_DEL_ROBOT",
     "GROUP_MSG_REJECT",
@@ -92,6 +93,7 @@ EVENT_DISPLAY_NAMES: dict[str, str] = {
     "PUBLIC_MESSAGE_DELETE": "公域消息删除",
     "DIRECT_MESSAGE_DELETE": "私信消息删除",
     "GROUP_AT_MESSAGE_CREATE": "群聊@消息",
+    "GROUP_MESSAGE_CREATE": "全量群聊消息",
     "C2C_MESSAGE_CREATE": "私聊消息",
     "DIRECT_MESSAGE_CREATE": "频道私信",
     "GUILD_CREATE": "加入频道",
@@ -147,6 +149,7 @@ _EVENT_MODEL_MAP: dict[str, Any] = {
     "DIRECT_MESSAGE_CREATE": Model.DirectMessage,
     "DIRECT_MESSAGE_DELETE": Model.MessageDelete,
     "GROUP_AT_MESSAGE_CREATE": Model.GroupMessage,
+    "GROUP_MESSAGE_CREATE": Model.GroupMessage,
     "C2C_MESSAGE_CREATE": Model.C2CMessage,
     "GUILD_CREATE": Model.Guild,
     "GUILD_UPDATE": Model.Guild,

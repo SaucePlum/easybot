@@ -30,6 +30,17 @@ from .models import (
 )
 from .plugins import BotCommandObject, CommandValidScenes
 
+TimeoutReplyMessage = (
+    str
+    | MessagesModel.Message
+    | MessagesModel.MessageEmbed
+    | MessagesModel.MessageArk23
+    | MessagesModel.MessageArk24
+    | MessagesModel.MessageArk37
+    | MessagesModel.MessageMarkdown
+    | None
+)
+
 if TYPE_CHECKING:
     from .bot import Bot
 
@@ -116,16 +127,7 @@ class _SessionObject:
         data: dict,
         timeout: float | None = None,
         last_operate: float = 0,
-        timeout_reply: (
-            str
-            | MessagesModel.Message
-            | MessagesModel.MessageEmbed
-            | MessagesModel.MessageArk23
-            | MessagesModel.MessageArk24
-            | MessagesModel.MessageArk37
-            | MessagesModel.MessageMarkdown
-            | None
-        ) = None,
+        timeout_reply: TimeoutReplyMessage = None,
         inactive_gc_timeout: float = 0,
         gc_timeout_stamp: float | None = None,
         timeout_reply_api: str | None = None,
@@ -182,16 +184,7 @@ class BoundSession:
         identify: Hashable | None = None,
         is_replace: bool = True,
         timeout: float | None = None,
-        timeout_reply: (
-            str
-            | MessagesModel.Message
-            | MessagesModel.MessageEmbed
-            | MessagesModel.MessageArk23
-            | MessagesModel.MessageArk24
-            | MessagesModel.MessageArk37
-            | MessagesModel.MessageMarkdown
-            | None
-        ) = None,
+        timeout_reply: TimeoutReplyMessage = None,
         inactive_gc_timeout: float | None = 0,
         send_reply_on_msg_id_expired: bool = False,
     ) -> SessionObject:
@@ -905,16 +898,7 @@ class SessionManager:
         identify: Hashable | None = None,
         is_replace: bool = True,
         timeout: float | None = None,
-        timeout_reply: (
-            str
-            | MessagesModel.Message
-            | MessagesModel.MessageEmbed
-            | MessagesModel.MessageArk23
-            | MessagesModel.MessageArk24
-            | MessagesModel.MessageArk37
-            | MessagesModel.MessageMarkdown
-            | None
-        ) = None,
+        timeout_reply: TimeoutReplyMessage = None,
         inactive_gc_timeout: float | None = 0,
         send_reply_on_msg_id_expired: bool = False,
     ) -> SessionObject:
@@ -1329,16 +1313,7 @@ class SessionManager:
         identify: Hashable = None,
         is_replace: bool = True,
         timeout: float | None = None,
-        timeout_reply: (
-            str
-            | MessagesModel.Message
-            | MessagesModel.MessageEmbed
-            | MessagesModel.MessageArk23
-            | MessagesModel.MessageArk24
-            | MessagesModel.MessageArk37
-            | MessagesModel.MessageMarkdown
-            | None
-        ) = None,
+        timeout_reply: TimeoutReplyMessage = None,
         inactive_gc_timeout: float | None = 0,
         send_reply_on_msg_id_expired: bool = False,
     ) -> SessionObject:

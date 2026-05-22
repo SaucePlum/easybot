@@ -350,7 +350,7 @@ class Bot:
         return decorator
 
     @property
-    def on_group_message(
+    def on_at_group_message(
         self,
     ) -> "Callable[[Callable[[Model.GroupMessage], Awaitable[None]]], Callable[[Model.GroupMessage], Awaitable[None]]]":
         """
@@ -367,6 +367,29 @@ class Bot:
         ) -> "Callable[[Model.GroupMessage], Awaitable[None]]":
             self._register_handler(
                 "GROUP_AT_MESSAGE_CREATE", func, Intent.GROUP_AND_C2C_EVENT
+            )
+            return func
+
+        return decorator
+
+    @property
+    def on_group_message(
+        self,
+    ) -> "Callable[[Callable[[Model.GroupMessage], Awaitable[None]]], Callable[[Model.GroupMessage], Awaitable[None]]]":
+        """
+        全量群聊消息事件
+
+        事件类型: GROUP_MESSAGE_CREATE
+        Intent: GROUP_AND_C2C_EVENT (1<<25)
+        callback: 类型为 function。该回调函数应包含一个参数，
+            用于接收群聊消息事件对应的模型对象 `Model.GroupMessage`。
+        """
+
+        def decorator(
+            func: "Callable[[Model.GroupMessage], Awaitable[None]]",
+        ) -> "Callable[[Model.GroupMessage], Awaitable[None]]":
+            self._register_handler(
+                "GROUP_MESSAGE_CREATE", func, Intent.GROUP_AND_C2C_EVENT
             )
             return func
 

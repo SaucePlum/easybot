@@ -211,6 +211,7 @@ _EVENT_CONFIG: dict[str, tuple[str, str, str]] = {
     "DIRECT_MESSAGE_CREATE": ("direct", "guild_id", "id"),
     # ===== 群聊场景 (group) =====
     "GROUP_AT_MESSAGE_CREATE": ("group", "group_openid", "id"),
+    "GROUP_MESSAGE_CREATE": ("group", "group_openid", "id"),
     "GROUP_ADD_ROBOT": ("group", "group_openid", ""),
     "GROUP_MSG_RECEIVE": ("group", "group_openid", ""),
     # ===== 单聊场景 (c2c) =====
